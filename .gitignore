@@ -2,14 +2,15 @@
 # https://github.com/github/gitignore/blob/main/community/Golang/Go.AllowList.gitignore
 #
 # Binaries for programs and plugins
-*.exe
-*.exe~
-*.dll
-*.so
-*.dylib
+config.yml
+iterator
+.air.toml
 
 # Test binary, built with `go test -c`
 *.test
+tests/
+it-data/
+helpers/
 
 # Output of the go coverage tool, specifically when used with LiteIDE
 *.out

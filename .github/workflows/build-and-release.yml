@@ -1,0 +1,39 @@
+name: Build and Release
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v2
+
+    - name: Set up Go
+      uses: actions/setup-go@v2
+      with:
+        go-version: '^1.21'
+
+    - name: Read API_VERSION
+      run: echo "VERSION=$(cat API_VERSION)" >> $GITHUB_ENV
+
+    - name: Build Binary
+      run: make build
+
+    - name: Create Release
+      uses: softprops/action-gh-release@v1
+      with:
+        tag_name: "v${{ env.VERSION }}"
+        release_name: "Release v${{ env.VERSION }}"
+        draft: false
+        prerelease: false
+        body: "Iterator binary release"
+        files: |
+          build/iterator
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

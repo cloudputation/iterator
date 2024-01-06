@@ -1,6 +1,7 @@
 package command
 
 import (
+	"github.com/prometheus/alertmanager/template"
 	"math/rand"
 	"os"
 	"sort"
@@ -10,6 +11,45 @@ import (
 	"time"
 )
 
+var (
+	// A sample alert from prometheus alert manager
+	amData = template.Data{
+		Receiver: "default", Status: "firing", Alerts: template.Alerts{
+			template.Alert{Status: "firing", Labels: template.KV{
+				"job":       "broken",
+				"monitor":   "codelab-monitor",
+				"alertname": "InstanceDown",
+				"instance":  "localhost:1234",
+			},
+				Annotations:  template.KV{},
+				StartsAt:     time.Unix(1460045332, 0),
+				EndsAt:       time.Time{},
+				GeneratorURL: "http://oldpad:9090/graph#%5B%7B%22expr%22%3A%22up%20%3D%3D%200%22%2C%22tab%22%3A0%7D%5D",
+			},
+			template.Alert{Status: "firing", Labels: template.KV{
+				"job":       "broken",
+				"monitor":   "codelab-monitor",
+				"alertname": "InstanceDown",
+				"instance":  "localhost:5678",
+			},
+				Annotations:  template.KV{},
+				StartsAt:     time.Unix(1460045332, 0),
+				EndsAt:       time.Time{},
+				GeneratorURL: "http://oldpad:9090/graph#%5B%7B%22expr%22%3A%22up%20%3D%3D%200%22%2C%22tab%22%3A0%7D%5D",
+				Fingerprint:  "boop",
+			},
+		},
+		GroupLabels: template.KV{"alertname": "InstanceDown"},
+		CommonLabels: template.KV{
+			"alertname": "InstanceDown",
+			"instance":  "localhost:1234",
+			"job":       "broken",
+			"monitor":   "codelab-monitor",
+		},
+		CommonAnnotations: template.KV{},
+		ExternalURL:       "http://oldpad:9093",
+	}
+)
 // containsString returns true if the string is in the collection
 func containsString(want string, coll []string) bool {
 	for _, v := range coll {

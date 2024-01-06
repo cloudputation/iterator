@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"github.com/prometheus/alertmanager/template"
@@ -30,6 +31,11 @@ type CommandDetails struct {
 }
 
 const (
+	// How long we are willing to wait for the HTTP server to shut down gracefully
+	serverShutdownTime = time.Second * 4
+)
+
+const (
 	// Enum for reasons of why a command could or couldn't run
 	CmdRunNoLabelMatch CmdRunReason = iota
 	CmdRunNoMax
@@ -49,6 +55,7 @@ const (
 	SigLabelFail       = "fail"
 )
 
+var dataDir string
 var (
 	CmdRunDesc = map[CmdRunReason]string{
 		CmdRunNoLabelMatch: "No match for alert labels",
@@ -426,7 +433,12 @@ func (s *Server) initMetrics() error {
 // The prometheus structs use sync/atomic in methods like Dec and Observe,
 // so they're safe to call concurrently from goroutines.
 func (s *Server) instrument(fingerprint string, cmd *command.Command, env []string, out chan<- command.CommandResult) {
-	dataDir := s.initConfig.Server.DataDir
+	if s.initConfig != nil && s.initConfig.Server != nil && s.initConfig.Server.DataDir != "" {
+		dataDir = s.initConfig.Server.DataDir
+   	fmt.Printf("Data dir is: %s", dataDir)
+	} else {
+    dataDir = "./data"
+	}
 	executorDir := fmt.Sprintf("%s/executor/map/fingerprints", dataDir)
 
 	verbose := s.config.Verbose
@@ -577,6 +589,12 @@ func (s *Server) Start() (*http.Server, chan error) {
 	}()
 
 	return srv, httpSrvResult
+}
+
+func StopServer(srv *http.Server) error {
+	ctx, cancel := context.WithTimeout(context.Background(), serverShutdownTime)
+	defer cancel()
+	return srv.Shutdown(ctx)
 }
 
 // NewServer returns a new server instance

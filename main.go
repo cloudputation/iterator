@@ -1,13 +1,10 @@
 package main
 
 import (
-	"context"
 	"fmt"
 	"log"
-	"net/http"
 	"os"
 	"os/signal"
-	"time"
 
 	"github.com/cloudputation/iterator/packages/storage"
 	"github.com/cloudputation/iterator/packages/terraform"
@@ -17,12 +14,6 @@ import (
 
 var GlobalConfig *config.InitConfig
 
-const (
-	// How long we are willing to wait for the HTTP server to shut down gracefully
-	serverShutdownTime = time.Second * 4
-)
-
-
 func init() {
   var err error
   GlobalConfig, err = config.LoadConfig(".release/defaults/test.config.hcl")
@@ -31,13 +22,6 @@ func init() {
   }
 	storage.InitStorage(GlobalConfig)
 	terraform.InitTerraform(GlobalConfig)
-}
-
-// stopServer issues a time-limited server shutdown
-func stopServer(srv *http.Server) error {
-	ctx, cancel := context.WithTimeout(context.Background(), serverShutdownTime)
-	defer cancel()
-	return srv.Shutdown(ctx)
 }
 
 func main() {
@@ -72,7 +56,7 @@ func main() {
 		}
 	case sig := <-signals:
 		log.Println("Shutting down due to signal:", sig)
-		if err := stopServer(srv); err != nil {
+		if err := server.StopServer(srv); err != nil {
 			log.Printf("Failed to shut down HTTP server: %v", err)
 		}
 	}

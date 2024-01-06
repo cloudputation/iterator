@@ -19,6 +19,9 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/cloudputation/iterator/packages/config"
+	"github.com/cloudputation/iterator/packages/command"
 )
 
 var (
@@ -147,13 +150,13 @@ var (
 	}
 )
 
-// genServer returns a test server for the prometheus-am-executor.
+// genServer returns a test server for iterator.
 func genServer() (*Server, error) {
 	addr, err := RandLoopAddr()
-	c := Config{
+	c := config.Config{
 		ListenAddr: addr,
 		Verbose:    false,
-		Commands: []*Command{
+		Commands: []*command.Command{
 			{Cmd: "echo"},
 		},
 	}
@@ -356,7 +359,7 @@ func Test_handleWebhook(t *testing.T) {
 	cases := []struct {
 		name           string
 		verbose        bool
-		commands       []*Command
+		commands       []*command.Command
 		reqs           []*http.Request
 		statusCode     int
 		errors         int
@@ -367,7 +370,7 @@ func Test_handleWebhook(t *testing.T) {
 		// The httptest.NewRequest() call sends a request to handleWebhook
 		{
 			name:       "good",
-			commands:   []*Command{{Cmd: "echo"}},
+			commands:   []*command.Command{{Cmd: "echo"}},
 			reqs:       []*http.Request{httptest.NewRequest("GET", "/", bytes.NewReader(trigger))},
 			statusCode: http.StatusOK,
 			errors:     0,
@@ -375,7 +378,7 @@ func Test_handleWebhook(t *testing.T) {
 		// We'll expect 2 errors based on these commands
 		{
 			name: "cmd_errors",
-			commands: []*Command{
+			commands: []*command.Command{
 				{Cmd: "false"},
 				{Cmd: "false", Args: []string{"banana"}},
 			},
@@ -386,7 +389,7 @@ func Test_handleWebhook(t *testing.T) {
 		// We'll expect 0 errors due to NotifyOnFailure being False
 		{
 			name: "no_error_notify",
-			commands: []*Command{
+			commands: []*command.Command{
 				{Cmd: "false", NotifyOnFailure: &alsoFalse},
 				{Cmd: "false", Args: []string{"banana"}, NotifyOnFailure: &alsoFalse},
 			},
@@ -397,7 +400,7 @@ func Test_handleWebhook(t *testing.T) {
 		// We'll expect 0 errors due to command being killed by being resolved
 		{
 			name:     "resolved",
-			commands: []*Command{{Cmd: "sleep", Args: []string{"4s"}}},
+			commands: []*command.Command{{Cmd: "sleep", Args: []string{"4s"}}},
 			reqs: []*http.Request{
 				httptest.NewRequest("GET", "/", bytes.NewReader(trigger)),
 				httptest.NewRequest("GET", "/", bytes.NewReader(resolve)),
@@ -409,7 +412,7 @@ func Test_handleWebhook(t *testing.T) {
 		// Expect no error due to command not being killed by being resolved, because IgnoreResolved is true
 		{
 			name:     "ignore_resolved",
-			commands: []*Command{{Cmd: "sleep", Args: []string{"4s"}, IgnoreResolved: &alsoTrue}},
+			commands: []*command.Command{{Cmd: "sleep", Args: []string{"4s"}, IgnoreResolved: &alsoTrue}},
 			reqs: []*http.Request{
 				httptest.NewRequest("GET", "/", bytes.NewReader(trigger)),
 				httptest.NewRequest("GET", "/", bytes.NewReader(resolve)),
@@ -423,7 +426,7 @@ func Test_handleWebhook(t *testing.T) {
 		// Expect 0 skipped due to no Max
 		{
 			name: "no_max",
-			commands: []*Command{
+			commands: []*command.Command{
 				{Cmd: "sleep", Args: []string{"4s"}},
 			},
 			reqs: []*http.Request{
@@ -439,7 +442,7 @@ func Test_handleWebhook(t *testing.T) {
 		// Expect 1 skipped due to Max being exceeded
 		{
 			name: "max",
-			commands: []*Command{
+			commands: []*command.Command{
 				{Cmd: "sleep", Args: []string{"4s"}, Max: 1},
 			},
 			reqs: []*http.Request{
@@ -571,7 +574,7 @@ func TestServer_CanRun(t *testing.T) {
 	var reset = func() { srv.fingerCount.Reset("boop") }
 	cases := []struct {
 		name    string
-		command Command
+		command command.Command
 		data    *template.Data
 		ok      bool
 		reason  CmdRunReason
@@ -581,7 +584,7 @@ func TestServer_CanRun(t *testing.T) {
 		// Can run because no labels are defined
 		{
 			name:    "no_labels",
-			command: Command{Cmd: "echo", Max: 99},
+			command: command.Command{Cmd: "echo", Max: 99},
 			data:    &amData,
 			ok:      true,
 			reason:  CmdRunNoFinger,
@@ -591,7 +594,7 @@ func TestServer_CanRun(t *testing.T) {
 		// Can't run because the command doesn't match any alert labels
 		{
 			name: "no_match",
-			command: Command{
+			command: command.Command{
 				Cmd: "echo",
 				MatchLabels: map[string]string{
 					"env":   "testing",
@@ -607,7 +610,7 @@ func TestServer_CanRun(t *testing.T) {
 		// Can run if there's no limit to instances of the command
 		{
 			name: "no_max",
-			command: Command{
+			command: command.Command{
 				Cmd: "echo",
 				MatchLabels: map[string]string{
 					"job":      "broken",
@@ -624,7 +627,7 @@ func TestServer_CanRun(t *testing.T) {
 		// Can run if there's no fingerprint
 		{
 			name: "no_fingerprint",
-			command: Command{
+			command: command.Command{
 				Cmd: "echo",
 				MatchLabels: map[string]string{
 					"job":      "broken",
@@ -641,7 +644,7 @@ func TestServer_CanRun(t *testing.T) {
 		// Can run if fingerprint is under the limit
 		{
 			name: "fingerprint_under_limit",
-			command: Command{
+			command: command.Command{
 				Cmd: "echo",
 				MatchLabels: map[string]string{
 					"job":      "broken",
@@ -658,7 +661,7 @@ func TestServer_CanRun(t *testing.T) {
 		// Can't run if fingerprint is over the limit
 		{
 			name: "fingerprint_over_limit",
-			command: Command{
+			command: command.Command{
 				Cmd: "echo",
 				MatchLabels: map[string]string{
 					"job":      "broken",
@@ -677,7 +680,7 @@ func TestServer_CanRun(t *testing.T) {
 	for _, tc := range cases {
 		tc := tc // Capture range variable, for use in anonymous function
 		t.Run(tc.name, func(t *testing.T) {
-			srv.config.Commands = []*Command{&tc.command}
+			srv.config.Commands = []*command.Command{&tc.command}
 			tc.before()
 			defer tc.after()
 			ok, reason := srv.CanRun(&tc.command, tc.data)
@@ -730,10 +733,10 @@ func TestNewServer(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	c := Config{
+	c := config.Config{
 		ListenAddr: addr,
 		Verbose:    false,
-		Commands: []*Command{
+		Commands: []*command.Command{
 			{Cmd: "echo"},
 		},
 	}

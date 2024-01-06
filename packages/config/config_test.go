@@ -5,6 +5,8 @@ import (
 	"io/ioutil"
 	"os"
 	"testing"
+
+	"github.com/cloudputation/iterator/packages/command"
 )
 
 func Test_mergeConfigs(t *testing.T) {
@@ -13,7 +15,7 @@ func Test_mergeConfigs(t *testing.T) {
 	a := &Config{
 		ListenAddr: "localhost:8080",
 		Verbose:    false,
-		Commands: []*Command{
+		Commands: []*command.Command{
 			{Cmd: "echo"},
 		},
 	}
@@ -21,7 +23,7 @@ func Test_mergeConfigs(t *testing.T) {
 	b := &Config{
 		ListenAddr: "localhost:8081",
 		Verbose:    true,
-		Commands: []*Command{
+		Commands: []*command.Command{
 			{Cmd: "/bin/echo"},
 		},
 	}
@@ -34,7 +36,7 @@ func Test_mergeConfigs(t *testing.T) {
 		t.Errorf("Wrong Verbose for merged config; got %v, want %v", merged.Verbose, b.Verbose)
 	}
 
-	allCmds := make([]*Command, 0)
+	allCmds := make([]*command.Command, 0)
 	allCmds = append(allCmds, a.Commands...)
 	allCmds = append(allCmds, b.Commands...)
 	for _, cmd := range allCmds {
@@ -135,12 +137,12 @@ commands:
 	var alsoTrue = true
 	var alsoFalse = false
 	var cases = []struct {
-		cmd                  *Command
+		cmd                  *command.Command
 		shouldNotify         bool
 		shouldIgnoreResolved bool
 	}{
 		{
-			cmd: &Command{
+			cmd: &command.Command{
 				Cmd:  "echo",
 				Args: []string{"banana", "tomato"},
 				MatchLabels: map[string]string{
@@ -154,7 +156,7 @@ commands:
 			shouldIgnoreResolved: false,
 		},
 		{
-			cmd: &Command{
+			cmd: &command.Command{
 				Cmd: "/bin/true",
 				MatchLabels: map[string]string{
 					"beep": "boop",
@@ -188,7 +190,7 @@ commands:
 
 func TestConfig_HasCommand(t *testing.T) {
 	t.Parallel()
-	a := &Command{
+	a := &command.Command{
 		Cmd:         "echo",
 		Args:        []string{"banana", "lemon"},
 		MatchLabels: map[string]string{"env": "test", "owner": "me"},

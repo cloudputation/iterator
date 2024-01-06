@@ -24,7 +24,7 @@ type InitCommand struct {
     Max             int               `yaml:"max,omitempty"`
 }
 
-func RenderConfig(config *InitConfig) error {
+func RenderConfig(config *InitConfig, ymlConfigPath string) error {
     yamlConfig := YAMLConfig{
         ListenAddress: config.Server.Listen,
         Verbose:       config.Server.LogLevel == "DEBUG",
@@ -53,5 +53,5 @@ func RenderConfig(config *InitConfig) error {
     if err != nil {
         return err
     }
-    return ioutil.WriteFile("config.yml", data, 0644)
+    return ioutil.WriteFile(ymlConfigPath, data, 0644)
 }

@@ -10,7 +10,7 @@ import (
 )
 
 const (
-	defaultListenAddr = ":8080"
+	defaultListenAddr = "9095"
 )
 
 // Config represents the configuration for this program

@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -21,11 +22,10 @@ const (
 	serverShutdownTime = time.Second * 4
 )
 
-var configFile = "./config.yml"
 
 func init() {
   var err error
-  GlobalConfig, err = config.LoadConfig(".release/defaults/config.hcl")
+  GlobalConfig, err = config.LoadConfig(".release/defaults/test.config.hcl")
   if err != nil {
       log.Fatalf("Error loading config: %v", err)
   }
@@ -41,8 +41,9 @@ func stopServer(srv *http.Server) error {
 }
 
 func main() {
+	var configFile = fmt.Sprintf("%s/config.yml", GlobalConfig.Server.DataDir)
 	// Render YAML configuration based on the loaded HCL config
-	err := config.RenderConfig(GlobalConfig)
+	err := config.RenderConfig(GlobalConfig, configFile)
 	if err != nil {
 			log.Fatalf("Error rendering YAML config: %v", err)
 	}

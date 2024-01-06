@@ -1,7 +1,6 @@
 package server
 
 import (
-	// "bytes"
 	"encoding/json"
 	"fmt"
 	"github.com/prometheus/alertmanager/template"
@@ -12,7 +11,6 @@ import (
 	"log"
 	"net/http"
 	"os"
-	// "os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -530,6 +528,7 @@ func (s *Server) CanRun(cmd *command.Command, amMsg *template.Data) (bool, CmdRu
 // a channel that will contain the error result of the ListenAndServe call
 func (s *Server) Start() (*http.Server, chan error) {
 	fmt.Printf("STARTING SERVER\n")
+	serverPort := fmt.Sprintf(":%s", s.config.ListenAddr)
 	s.registry.MustRegister(s.processDuration)
 	s.registry.MustRegister(s.processCurrent)
 	s.registry.MustRegister(s.errCounter)
@@ -545,7 +544,7 @@ func (s *Server) Start() (*http.Server, chan error) {
 	// We use our own instance of ServeMux instead of DefaultServeMux,
 	// to keep handler registration separate between server instances.
 	mux := http.NewServeMux()
-	srv := &http.Server{Addr: s.config.ListenAddr, Handler: mux}
+	srv := &http.Server{Addr: serverPort, Handler: mux}
 	mux.HandleFunc("/", s.handleWebhook)
 	mux.HandleFunc("/_health", handleHealth)
 	mux.Handle("/metrics", promhttp.HandlerFor(s.registry, promhttp.HandlerOpts{
@@ -563,7 +562,7 @@ func (s *Server) Start() (*http.Server, chan error) {
 		for i, e := range s.config.Commands {
 			commands[i] = e.String()
 		}
-		log.Println("Listening on", s.config.ListenAddr, "with commands", strings.Join(commands, ", "))
+		log.Println("Listening on", serverPort, "with commands", strings.Join(commands, ", "))
 		if (s.config.TLSCrt != "") && (s.config.TLSKey != "") {
 			if s.config.Verbose {
 				log.Println("HTTPS on")

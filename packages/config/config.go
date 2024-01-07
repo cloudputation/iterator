@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"gopkg.in/yaml.v2"
 	"io/ioutil"
-	"log"
 
 	"github.com/cloudputation/iterator/packages/command"
+	log "github.com/cloudputation/iterator/packages/logger"
 )
 
 const (
@@ -88,7 +88,7 @@ func ReadConfig(configFile string) (*Config, error) {
         }
 
         if cmd.IgnoreResolved != nil && *cmd.IgnoreResolved {
-            log.Printf("Warning: command %q at index %d specifies a resolved_signal, and also specifies to ignore resolved alert. The signal won't be used.", cmd, i)
+            log.Warn("Warning: command %q at index %d specifies a resolved_signal, and also specifies to ignore resolved alert. The signal won't be used.", cmd, i)
         }
     }
 

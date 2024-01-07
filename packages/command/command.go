@@ -3,7 +3,7 @@ package command
 import (
 	"fmt"
 	"github.com/prometheus/alertmanager/template"
-	"log"
+	l "log"
 	"os"
 	"os/exec"
 	"sort"
@@ -12,6 +12,7 @@ import (
 	"sync"
 	"syscall"
 	"unicode"
+	log "github.com/cloudputation/iterator/packages/logger"
 )
 
 const (
@@ -213,7 +214,7 @@ func (c Command) Run(out chan<- CommandResult, quit chan struct{}, done chan str
 
 	if verbose {
 			for _, e := range env {
-					log.Println("Running Terraform command with environment variable:", e)
+					log.Info("Running Terraform command with environment variable: %s", e)
 			}
 	}
 
@@ -316,7 +317,7 @@ func (c Command) String() string {
 // WithEnv returns a runnable command with the given environment variables added.
 // Command STDOUT and STDERR is attached to the logger.
 func (c Command) WithEnv(env ...string) *exec.Cmd {
-	lw := log.Writer()
+	lw := l.Writer()
 	cmd := exec.Command(c.Cmd, c.Args...)
 	cmd.Env = append(os.Environ(), env...)
 	cmd.Stdout = lw

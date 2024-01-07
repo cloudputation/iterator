@@ -3,6 +3,7 @@ module github.com/cloudputation/iterator
 go 1.21.4
 
 require (
+	github.com/hashicorp/go-hclog v1.6.2
 	github.com/hashicorp/hcl/v2 v2.19.1
 	github.com/juju/testing v1.1.0
 	github.com/mitchellh/mapstructure v1.5.0
@@ -19,10 +20,13 @@ require (
 	github.com/apparentlymart/go-textseg/v15 v15.0.0 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/cespare/xxhash/v2 v2.2.0 // indirect
+	github.com/fatih/color v1.13.0 // indirect
 	github.com/google/go-cmp v0.5.9 // indirect
 	github.com/juju/loggo v1.0.0 // indirect
 	github.com/kr/pretty v0.3.1 // indirect
 	github.com/kr/text v0.2.0 // indirect
+	github.com/mattn/go-colorable v0.1.12 // indirect
+	github.com/mattn/go-isatty v0.0.14 // indirect
 	github.com/matttproud/golang_protobuf_extensions/v2 v2.0.0 // indirect
 	github.com/mitchellh/go-wordwrap v1.0.0 // indirect
 	github.com/pkg/errors v0.9.1 // indirect

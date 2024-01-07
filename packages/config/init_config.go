@@ -5,6 +5,7 @@ import (
     "github.com/hashicorp/hcl/v2"
     "github.com/hashicorp/hcl/v2/hclparse"
     "github.com/zclconf/go-cty/cty"
+	log "github.com/cloudputation/iterator/packages/logger"
 )
 
 type InitConfig struct {
@@ -16,6 +17,7 @@ type Server struct {
     Listen string
     DataDir string
     LogLevel string
+    LogDir string
     TerraformDriver string
     Consul          ConsulConfig
 }
@@ -36,39 +38,6 @@ type Condition struct {
     ResolvedSignal  string
     IgnoreResolved  bool
     Labels          map[string]string
-}
-
-// Init Config prepares the server by loading a preconfiguratin file that will be used
-// to generate the executor's config as well as other current and future server parameters
-func printConfig(config *InitConfig) {
-    if config.Server != nil {
-        fmt.Printf("Server:\n")
-        fmt.Printf("  Listen: %s\n", config.Server.Listen)
-        fmt.Printf("  DataDirectory: %s\n", config.Server.DataDir)
-        fmt.Printf("  LogLevel: %s\n", config.Server.LogLevel)
-        fmt.Printf("  Terraform Driver: %s\n", config.Server.TerraformDriver)
-        if config.Server.Consul.Address != "" {
-            fmt.Printf("  Consul:\n")
-            fmt.Printf("    Address: %s\n", config.Server.Consul.Address)
-        }
-        fmt.Println()
-    }
-
-    for _, task := range config.Tasks {
-        fmt.Printf("Task:\n")
-        fmt.Printf("  Name: %s\n", task.Name)
-        fmt.Printf("  Description: %s\n", task.Description)
-        fmt.Printf("  Source: %s\n", task.Source)
-        fmt.Printf("  Condition:\n")
-        fmt.Printf("    NotifyOnFailure: %v\n", task.Condition.NotifyOnFailure)
-        fmt.Printf("    ResolvedSignal: %s\n", task.Condition.ResolvedSignal)
-        fmt.Printf("    IgnoreResolved: %v\n", task.Condition.IgnoreResolved)
-        fmt.Printf("    Labels:\n")
-        for key, value := range task.Condition.Labels {
-            fmt.Printf("      %s: %s\n", key, value)
-        }
-        fmt.Println()
-    }
 }
 
 func LoadConfig(configPath string) (*InitConfig, error) {
@@ -94,13 +63,19 @@ func LoadConfig(configPath string) (*InitConfig, error) {
     for _, block := range content.Blocks {
         switch block.Type {
         case "task":
-            taskMap := processTaskBlock(block)
+            taskMap, err := processTaskBlock(block)
+            if err != nil {
+              return nil, fmt.Errorf("failed to process task block %w", err)
+            }
             if taskMap != nil {
                 task := populateTaskStruct(taskMap)
                 config.Tasks = append(config.Tasks, task)
             }
         case "server":
-            serverMap := processServerBlock(block)
+            serverMap, err := processServerBlock(block)
+            if err != nil {
+              return nil, fmt.Errorf("failed to process server block %w", err)
+            }
             if serverMap != nil {
                 config.Server = populateServerStruct(serverMap)
             }
@@ -110,13 +85,14 @@ func LoadConfig(configPath string) (*InitConfig, error) {
     return config, nil
 }
 
-func processServerBlock(serverBlock *hcl.Block) map[string]interface{} {
+func processServerBlock(serverBlock *hcl.Block) (map[string]interface{}, error) {
     serverData := make(map[string]interface{})
 
     content, _, diags := serverBlock.Body.PartialContent(&hcl.BodySchema{
         Attributes: []hcl.AttributeSchema{
             {Name: "data_dir"},
             {Name: "log_level"},
+            {Name: "log_dir"},
             {Name: "listen"},
             {Name: "terraform_driver"},
         },
@@ -125,14 +101,13 @@ func processServerBlock(serverBlock *hcl.Block) map[string]interface{} {
         },
     })
     if diags.HasErrors() {
-        fmt.Printf("Failed to get server content: %s\n", diags)
-        return nil
+        return nil, fmt.Errorf("failed to get server content: %s", diags)
     }
 
     for k, attr := range content.Attributes {
         val, diags := attr.Expr.Value(nil)
         if diags.HasErrors() {
-            fmt.Printf("Failed to decode attribute value for %s: %s\n", k, diags)
+            log.Error("Failed to decode attribute value for %s: %s", k, diags)
             continue
         }
         serverData[k] = val.AsString()
@@ -140,35 +115,37 @@ func processServerBlock(serverBlock *hcl.Block) map[string]interface{} {
 
     for _, block := range content.Blocks {
         if block.Type == "consul" {
-            consulData := processConsulBlock(block)
+            consulData, err := processConsulBlock(block)
+            if err != nil {
+              return nil, fmt.Errorf("failed to process Consul block %w", err)
+            }
             if consulData != nil {
                 serverData["consul"] = consulData
             }
         }
     }
 
-    return serverData
+    return serverData, nil
 }
 
-func processConsulBlock(consulBlock *hcl.Block) map[string]interface{} {
+func processConsulBlock(consulBlock *hcl.Block) (map[string]interface{}, error) {
     consulData := make(map[string]interface{})
 
     attrs, diags := consulBlock.Body.JustAttributes()
     if diags.HasErrors() {
-        fmt.Printf("Failed to decode consul attributes: %s\n", diags)
-        return nil
+        return nil, fmt.Errorf("failed to decode consul attributes: %s", diags)
     }
 
     for key, attr := range attrs {
         val, diags := attr.Expr.Value(nil)
         if diags.HasErrors() {
-            fmt.Printf("Failed to decode attribute value for %s: %s\n", key, diags)
+            log.Error("Failed to decode attribute value for %s: %s", key, diags)
             continue
         }
         consulData[key] = val.AsString()
     }
 
-    return consulData
+    return consulData, nil
 }
 
 func populateServerStruct(serverMap map[string]interface{}) *Server {
@@ -176,6 +153,7 @@ func populateServerStruct(serverMap map[string]interface{}) *Server {
         Listen: serverMap["listen"].(string),
         DataDir: serverMap["data_dir"].(string),
         LogLevel: serverMap["log_level"].(string),
+        LogDir: serverMap["log_dir"].(string),
         TerraformDriver: serverMap["terraform_driver"].(string),
     }
 
@@ -216,7 +194,7 @@ func populateConditionStruct(condMap map[string]interface{}) Condition {
     return condition
 }
 
-func processTaskBlock(taskBlock *hcl.Block) map[string]interface{} {
+func processTaskBlock(taskBlock *hcl.Block) (map[string]interface{}, error) {
     taskData := make(map[string]interface{})
 
     content, _, diags := taskBlock.Body.PartialContent(&hcl.BodySchema{
@@ -230,14 +208,13 @@ func processTaskBlock(taskBlock *hcl.Block) map[string]interface{} {
         },
     })
     if diags.HasErrors() {
-        fmt.Printf("Failed to get task content: %s\n", diags)
-        return nil
+        return nil, fmt.Errorf("failed to get task content %s", diags)
     }
 
     for k, attr := range content.Attributes {
         val, diags := attr.Expr.Value(nil)
         if diags.HasErrors() {
-            fmt.Printf("Failed to decode attribute value for %s: %s\n", k, diags)
+            log.Error("Failed to decode attribute value for %s: %s", k, diags)
             continue
         }
         taskData[k] = val.AsString()
@@ -245,17 +222,20 @@ func processTaskBlock(taskBlock *hcl.Block) map[string]interface{} {
 
     for _, block := range content.Blocks {
         if block.Type == "condition" && len(block.Labels) > 0 && block.Labels[0] == "label-match" {
-            conditionData := processConditionBlock(block)
+            conditionData, err := processConditionBlock(block)
+            if err != nil {
+              return nil, fmt.Errorf("failed to process condition block %w", err)
+            }
             if conditionData != nil {
                 taskData["condition"] = conditionData
             }
         }
     }
 
-    return taskData
+    return taskData, nil
 }
 
-func processConditionBlock(conditionBlock *hcl.Block) map[string]interface{} {
+func processConditionBlock(conditionBlock *hcl.Block) (map[string]interface{}, error) {
     conditionData := make(map[string]interface{})
 
     content, _, diags := conditionBlock.Body.PartialContent(&hcl.BodySchema{
@@ -267,14 +247,13 @@ func processConditionBlock(conditionBlock *hcl.Block) map[string]interface{} {
         Blocks: []hcl.BlockHeaderSchema{{Type: "label"}},
     })
     if diags.HasErrors() {
-        fmt.Printf("Failed to get condition content: %s\n", diags)
-        return nil
+        return nil, fmt.Errorf("failed to get condition content %s", diags)
     }
 
     for k, attr := range content.Attributes {
         val, diags := attr.Expr.Value(nil)
         if diags.HasErrors() {
-            fmt.Printf("Failed to decode attribute value for %s: %s\n", k, diags)
+            log.Error("Failed to decode attribute value for %s: %s", k, diags)
             continue
         }
         if val.Type().Equals(cty.Bool) {
@@ -286,33 +265,35 @@ func processConditionBlock(conditionBlock *hcl.Block) map[string]interface{} {
 
     for _, labelBlock := range content.Blocks {
         if labelBlock.Type == "label" {
-            labelData := processLabelBlock(labelBlock)
+            labelData, err := processLabelBlock(labelBlock)
+            if err != nil {
+              return nil, fmt.Errorf("failed to process label block %w", err)
+            }
             if labelData != nil {
                 conditionData["labels"] = labelData
             }
         }
     }
 
-    return conditionData
+    return conditionData, nil
 }
 
-func processLabelBlock(labelBlock *hcl.Block) map[string]string {
+func processLabelBlock(labelBlock *hcl.Block) (map[string]string, error) {
     labels := make(map[string]string)
 
     attrs, diags := labelBlock.Body.JustAttributes()
     if diags.HasErrors() {
-        fmt.Printf("Failed to decode label attributes: %s\n", diags)
-        return nil
+        return nil, fmt.Errorf("failed to decode label attributes %s", diags)
     }
 
     for key, attr := range attrs {
         val, diags := attr.Expr.Value(nil)
         if diags.HasErrors() {
-            fmt.Printf("Failed to decode attribute value for %s: %s\n", key, diags)
+            log.Error("Failed to decode attribute value for %s: %s", key, diags)
             continue
         }
         labels[key] = val.AsString()
     }
 
-    return labels
+    return labels, nil
 }

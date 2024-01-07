@@ -8,6 +8,7 @@ iterator
 
 # Test binary, built with `go test -c`
 *.test
+iterator.log
 tests/
 data/
 helpers/

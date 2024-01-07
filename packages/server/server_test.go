@@ -22,6 +22,7 @@ import (
 
 	"github.com/cloudputation/iterator/packages/config"
 	"github.com/cloudputation/iterator/packages/command"
+	log "github.com/cloudputation/iterator/packages/logger"
 )
 
 var (

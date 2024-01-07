@@ -2,24 +2,33 @@ package main
 
 import (
 	"fmt"
-	"log"
 	"os"
 	"os/signal"
 
+	"github.com/cloudputation/iterator/packages/config"
+	log "github.com/cloudputation/iterator/packages/logger"
+	"github.com/cloudputation/iterator/packages/server"
 	"github.com/cloudputation/iterator/packages/storage"
 	"github.com/cloudputation/iterator/packages/terraform"
-	"github.com/cloudputation/iterator/packages/config"
-	"github.com/cloudputation/iterator/packages/server"
 )
 
 var GlobalConfig *config.InitConfig
+var logLevel = "info"
 
 func init() {
   var err error
   GlobalConfig, err = config.LoadConfig(".release/defaults/test.config.hcl")
   if err != nil {
-      log.Fatalf("Error loading config: %v", err)
+      log.Fatal("Error loading config: %v", err)
   }
+	if GlobalConfig.Server.LogLevel != " " {
+		logLevel =  GlobalConfig.Server.LogLevel
+	}
+
+	logDirPath := GlobalConfig.Server.LogDir
+	log.InitLogger(logDirPath, logLevel)
+	log.Info("Starting Iterator..")
+	log.Info("Log level is: %s", logLevel)
 	storage.InitStorage(GlobalConfig)
 	terraform.InitTerraform(GlobalConfig)
 }
@@ -29,14 +38,14 @@ func main() {
 	// Render YAML configuration based on the loaded HCL config
 	err := config.RenderConfig(GlobalConfig, configFile)
 	if err != nil {
-			log.Fatalf("Error rendering YAML config: %v", err)
+			log.Fatal("Error rendering YAML config: %v", err)
 	}
-	log.Println("YAML configuration generated successfully")
+	log.Info("YAML configuration generated successfully")
 
 	// Read YAML config
 	c, err := config.ReadConfig(configFile)
 	if err != nil {
-			log.Fatalf("Couldn't determine configuration: %v", err)
+			log.Fatal("Couldn't determine configuration: %v", err)
 	}
 	s := server.NewServer(GlobalConfig, c)
 
@@ -50,14 +59,14 @@ func main() {
 	select {
 	case err := <-srvResult:
 		if err != nil {
-			log.Fatalf("Failed to serve for %s: %v", c.ListenAddr, err)
+			log.Fatal("Failed to serve for %s: %v", c.ListenAddr, err)
 		} else {
-			log.Println("HTTP server shut down")
+			log.Info("HTTP server shut down")
 		}
 	case sig := <-signals:
-		log.Println("Shutting down due to signal:", sig)
+		log.Info("Shutting down due to signal: %s", sig)
 		if err := server.StopServer(srv); err != nil {
-			log.Printf("Failed to shut down HTTP server: %v", err)
+			log.Info("Failed to shut down HTTP server: %v", err)
 		}
 	}
 }

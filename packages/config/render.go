@@ -27,7 +27,7 @@ type InitCommand struct {
 func RenderConfig(config *InitConfig, ymlConfigPath string) error {
     yamlConfig := YAMLConfig{
         ListenAddress: config.Server.Listen,
-        Verbose:       config.Server.LogLevel == "DEBUG",
+        Verbose:       config.Server.LogLevel == "info",
     }
 
     terraformDriver := config.Server.TerraformDriver

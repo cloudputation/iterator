@@ -4,12 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	l "log"
 	"github.com/prometheus/alertmanager/template"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	pm "github.com/prometheus/client_model/go"
 	"io/ioutil"
-	"log"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -22,6 +22,7 @@ import (
 	"github.com/cloudputation/iterator/packages/command"
 	"github.com/cloudputation/iterator/packages/config"
 	"github.com/cloudputation/iterator/packages/countermap"
+	log "github.com/cloudputation/iterator/packages/logger"
 	"github.com/cloudputation/iterator/packages/terraform"
 )
 
@@ -211,7 +212,7 @@ func timeToStr(t time.Time) string {
 // handleError responds to an HTTP request with an error message and logs it
 func handleError(w http.ResponseWriter, err error) {
 	http.Error(w, err.Error(), http.StatusInternalServerError)
-	log.Println(err)
+	log.Error("%w", err)
 }
 
 // handleHealth is meant to respond to health checks for this program
@@ -255,7 +256,7 @@ func (s *Server) amFiring(amMsg *template.Data) []error {
           }
       }
       if s.config.Verbose {
-          log.Printf("Command: %s, result: %s", f.cmd.String(), resultState)
+          log.Info("Command: %s, result: %s", f.cmd.String(), resultState)
       }
   }
 
@@ -263,14 +264,14 @@ func (s *Server) amFiring(amMsg *template.Data) []error {
       ok, reason := s.CanRun(cmd, amMsg)
       if !ok {
           if s.config.Verbose {
-              log.Printf("Skipping command due to '%s': %s", reason, cmd)
+              log.Info("Skipping command due to '%s': %s", reason, cmd)
           }
           s.skipCounter.WithLabelValues(reason.Label()).Inc()
           continue
       }
 
       if s.config.Verbose {
-          log.Println("Executing:", cmd)
+          log.Info("Executing:", cmd)
       }
 
       fingerprint, _ := cmd.Fingerprint(amMsg)
@@ -312,14 +313,14 @@ func (s *Server) amResolved(amMsg *template.Data) {
 
       // Check if the fingerprint file exists
       if _, err := os.Stat(fingerprintFilePath); os.IsNotExist(err) {
-          log.Printf("Fingerprint file not found: %s", fingerprintFilePath)
+          log.Error("Fingerprint file not found: %s", fingerprintFilePath)
           continue
       }
 
       // Read and parse the fingerprint JSON file
       fileContent, err := os.ReadFile(fingerprintFilePath)
       if err != nil {
-          log.Printf("Error reading fingerprint file: %v", err)
+          log.Error("Error reading fingerprint file: %v", err)
           continue
       }
 
@@ -330,13 +331,13 @@ func (s *Server) amResolved(amMsg *template.Data) {
 
       err = json.Unmarshal(fileContent, &fingerprintData)
       if err != nil {
-          log.Printf("Error unmarshalling fingerprint data: %v", err)
+          log.Error("Error unmarshalling fingerprint data: %v", err)
           continue
       }
 
       modulePath := fingerprintData.Module
       if modulePath == "" {
-          log.Println("Module path is empty in fingerprint file")
+          log.Info("Module path is empty in fingerprint file")
           continue
       }
 
@@ -361,9 +362,8 @@ func (s *Server) amResolved(amMsg *template.Data) {
 // If a command fails, an HTTP 500 response is returned to alertmanager.
 // Note that alertmanager may treat non HTTP 200 responses as 'failure to notify', and may re-dispatch the alert to us.
 func (s *Server) handleWebhook(w http.ResponseWriter, req *http.Request) {
-	if s.config.Verbose {
-		log.Println("Webhook triggered from remote address:port", req.RemoteAddr)
-	}
+	log.Info("Webhook triggered from remote address: %s", req.RemoteAddr)
+
 	data, err := ioutil.ReadAll(req.Body)
 	if err != nil {
 		handleError(w, err)
@@ -371,18 +371,17 @@ func (s *Server) handleWebhook(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	if s.config.Verbose {
-		log.Println("Body:", string(data))
-	}
+	log.Info("Alert body:")
+	log.PrintJSONLog(string(data))
+
 	var amMsg = &template.Data{}
 	if err := json.Unmarshal(data, amMsg); err != nil {
 		handleError(w, err)
 		s.errCounter.WithLabelValues(ErrLabelUnmarshall).Inc()
 		return
 	}
-	if s.config.Verbose {
-		log.Printf("Got: %#v", amMsg)
-	}
+
+	log.Info("Alert template: %#v", amMsg)
 
 	var errors []error
 	switch amMsg.Status {
@@ -432,10 +431,10 @@ func (s *Server) initMetrics() error {
 //
 // The prometheus structs use sync/atomic in methods like Dec and Observe,
 // so they're safe to call concurrently from goroutines.
-func (s *Server) instrument(fingerprint string, cmd *command.Command, env []string, out chan<- command.CommandResult) {
+func (s *Server) instrument(fingerprint string, cmd *command.Command, env []string, out chan<- command.CommandResult) error {
 	if s.initConfig != nil && s.initConfig.Server != nil && s.initConfig.Server.DataDir != "" {
 		dataDir = s.initConfig.Server.DataDir
-   	fmt.Printf("Data dir is: %s", dataDir)
+   	log.Debug("Data dir is: %s", dataDir)
 	} else {
     dataDir = "./data"
 	}
@@ -453,7 +452,7 @@ func (s *Server) instrument(fingerprint string, cmd *command.Command, env []stri
 		s.fingerCount.Inc(fingerprint)
 		defer s.fingerCount.Dec(fingerprint)
 	} else if s.config.Verbose {
-		log.Println("Command has no fingerprint, so it won't quit early if alert is resolved first:", cmd)
+		log.Info("Command has no fingerprint, so it won't quit early if alert is resolved first:", cmd)
 	}
 
 	done := make(chan struct{})
@@ -482,15 +481,14 @@ func (s *Server) instrument(fingerprint string, cmd *command.Command, env []stri
 
 	commandDetails, exists := s.commandDetails[fingerprint]
 	if !exists || len(commandDetails.Args) == 0 {
-			log.Printf("Command details not found or empty for fingerprint: %s", fingerprint)
-			return
+			return fmt.Errorf("Command details not found or empty for fingerprint: %s", fingerprint)
 	}
 
 	chdirArg := commandDetails.Args[0]
 	modulePath := chdirArg[len("-chdir="):]
 	modulePath, err := filepath.Abs(modulePath)
 	if err != nil {
-			log.Fatalf("Failed to get absolute path: %v", err)
+			log.Fatal("Failed to get absolute path: %v", err)
 	}
 
 	fingerprintData := map[string]string{
@@ -500,15 +498,16 @@ func (s *Server) instrument(fingerprint string, cmd *command.Command, env []stri
 
 	data, err := json.Marshal(fingerprintData)
 	if err != nil {
-		log.Printf("Error marshaling fingerprint data: %v", err)
-		return
+		return fmt.Errorf("Error marshaling fingerprint data: %v", err)
 	}
 
 	filePath := fmt.Sprintf("%s/%s.json", executorDir, fingerprint)
 	err = os.WriteFile(filePath, data, 0644)
 	if err != nil {
-		log.Printf("Error writing fingerprint data to file: %v", err)
+		return fmt.Errorf("Error writing fingerprint data to file: %v", err)
 	}
+
+	return nil
 }
 
 // CanRun returns true if the Command is allowed to run based on its fingerprint and settings
@@ -539,7 +538,8 @@ func (s *Server) CanRun(cmd *command.Command, amMsg *template.Data) (bool, CmdRu
 // * a reference to the HTTP server (so that we can gracefully shut it down)
 // a channel that will contain the error result of the ListenAndServe call
 func (s *Server) Start() (*http.Server, chan error) {
-	fmt.Printf("STARTING SERVER\n")
+	log.Info("STARTING SERVER")
+	log.Info("Listening on port: %s", s.config.ListenAddr)
 	serverPort := fmt.Sprintf(":%s", s.config.ListenAddr)
 	s.registry.MustRegister(s.processDuration)
 	s.registry.MustRegister(s.processCurrent)
@@ -561,7 +561,7 @@ func (s *Server) Start() (*http.Server, chan error) {
 	mux.HandleFunc("/_health", handleHealth)
 	mux.Handle("/metrics", promhttp.HandlerFor(s.registry, promhttp.HandlerOpts{
 		// Prometheus can use the same logger we are, when printing errors about serving metrics
-		ErrorLog: log.New(os.Stderr, "", log.LstdFlags),
+		ErrorLog: l.New(os.Stderr, "", l.LstdFlags),
 		// Include metric handler errors in metrics output
 		Registry: s.registry,
 	}))
@@ -573,16 +573,18 @@ func (s *Server) Start() (*http.Server, chan error) {
 		commands := make([]string, len(s.config.Commands))
 		for i, e := range s.config.Commands {
 			commands[i] = e.String()
+			log.Info("Runnig server with commands: %s", commands[i])
 		}
-		log.Println("Listening on", serverPort, "with commands", strings.Join(commands, ", "))
+
+
 		if (s.config.TLSCrt != "") && (s.config.TLSKey != "") {
 			if s.config.Verbose {
-				log.Println("HTTPS on")
+				log.Info("HTTPS on")
 			}
 			httpSrvResult <- srv.ListenAndServeTLS(s.config.TLSCrt, s.config.TLSKey)
 		} else {
 			if s.config.Verbose {
-				log.Println("HTTPS off")
+				log.Info("HTTPS off")
 			}
 			httpSrvResult <- srv.ListenAndServe()
 		}

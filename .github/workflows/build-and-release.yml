@@ -31,6 +31,9 @@ jobs:
         username: cloudputation
         password: ${{ secrets.ITERATOR_DOCKER_CI }}
 
+    - name: Check Binary
+      run: ls ./build
+
     - name: Build and push Docker image
       uses: docker/build-push-action@v5
       with:

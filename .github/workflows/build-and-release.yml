@@ -32,7 +32,7 @@ jobs:
         password: ${{ secrets.ITERATOR_DOCKER_CI }}
 
     - name: Check Binary
-      run: ls ./build
+      run: ls ./build && pwd
 
     - name: Build and push Docker image
       uses: docker/build-push-action@v5

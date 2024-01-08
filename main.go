@@ -13,11 +13,12 @@ import (
 )
 
 var GlobalConfig *config.InitConfig
+var globalConfigPath = "/etc/iterator/config.hcl"
 var logLevel = "info"
 
 func init() {
   var err error
-  GlobalConfig, err = config.LoadConfig("/iterator/config/config.hcl")
+  GlobalConfig, err = config.LoadConfig(globalConfigPath)
   if err != nil {
       log.Fatal("Error loading config: %w", err)
   }

@@ -13,7 +13,7 @@ server {
 task {
   name        = "Task1"
   description = "Manage infrastructure for web service"
-  source      = "path/to/web/terraform/module"
+  source      = "/var/lib/iterator/terraform-data/moduleA"
   condition "label-match" {
     // Set to false to prevent non-zero exit codes from this command, from notifying alertmanager that the command failed.
     // Notifying alertmanager (HTTP 500) is likely to re-dispatch the alarm back to am-executor.
@@ -26,9 +26,8 @@ task {
     ignore_resolved   = true
     // User defined labels that match an alert
     label {
-      alertname = "important_alert"
+      alertname = "my_cool_alert"
       severity  = "warning"
-      foo       = "bar"
     }
   }
 }
@@ -36,15 +35,14 @@ task {
 task {
   name        = "Task2"
   description = "Manage infrastructure for database service"
-  source      = "path/to/database/terraform/module"
+  source      = "/var/lib/iterator/terraform-data/moduleB"
   condition "label-match" {
     notify_on_failure = false
     resolved_signal   = "SIGUSR1"
     ignore_resolved   = true
     label {
-      alertname = "another_important_alert"
+      alertname = "the_other_cool_alert"
       severity  = "boiling_hot"
-      service   = "mysql"
     }
   }
 }

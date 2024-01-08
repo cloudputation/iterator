@@ -51,11 +51,17 @@ jobs:
     - name: Check Binary
       run: ls ./build && pwd
 
-    - name: Build and push Docker image
-      uses: docker/build-push-action@v5
-      with:
-        push: true
-        tags: cloudputation/iterator:${{ env.VERSION }}
+    # - name: Build and push Docker image
+    #   uses: docker/build-push-action@v5
+    #   with:
+    #     push: true
+    #     tags: cloudputation/iterator:${{ env.VERSION }}
+
+    - name: Build Docker Container
+      run: make docker-build
+
+    - name: Push Docker Container
+      run: make docker-push
 
     - name: Create Release
       uses: softprops/action-gh-release@v1

@@ -36,8 +36,8 @@ jobs:
       with:
         push: true
         tags: cloudputation/iterator:${{ env.VERSION }}
-      build-args: |
-        PRODUCT_VERSION=${{ env.VERSION }}
+        build-args: |
+          PRODUCT_VERSION=${{ env.VERSION }}
 
     - name: Create Release
       uses: softprops/action-gh-release@v1

@@ -1,8 +1,9 @@
 server {
   data_dir  = "/var/lib/iterator"
-  log_level = "DEBUG"
-  // Default port is 9095
-  listen    = "9095"
+  log_dir   = "/var/log/iterator"
+  log_level = "info"
+  // Default port is 9595
+  listen    = "9595"
   terraform_driver  = "terraform"
   consul {
     address = "localhost:8500"

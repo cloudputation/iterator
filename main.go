@@ -17,13 +17,14 @@ var logLevel = "info"
 
 func init() {
   var err error
-  GlobalConfig, err = config.LoadConfig(".release/defaults/test.config.hcl")
+  GlobalConfig, err = config.LoadConfig("/iterator/config/config.hcl")
   if err != nil {
-      log.Fatal("Error loading config: %v", err)
+      log.Fatal("Error loading config: %w", err)
   }
 	if GlobalConfig.Server.LogLevel != " " {
 		logLevel =  GlobalConfig.Server.LogLevel
 	}
+
 
 	logDirPath := GlobalConfig.Server.LogDir
 	log.InitLogger(logDirPath, logLevel)
@@ -34,18 +35,18 @@ func init() {
 }
 
 func main() {
-	var configFile = fmt.Sprintf("%s/config.yml", GlobalConfig.Server.DataDir)
+	var ymlConfigPath = fmt.Sprintf("%s/config.yml", GlobalConfig.Server.DataDir)
 	// Render YAML configuration based on the loaded HCL config
-	err := config.RenderConfig(GlobalConfig, configFile)
+	err := config.RenderConfig(GlobalConfig, ymlConfigPath)
 	if err != nil {
-			log.Fatal("Error rendering YAML config: %v", err)
+			log.Fatal("Error rendering YAML config: %w", err)
 	}
 	log.Info("YAML configuration generated successfully")
 
 	// Read YAML config
-	c, err := config.ReadConfig(configFile)
+	c, err := config.ReadConfig(ymlConfigPath)
 	if err != nil {
-			log.Fatal("Couldn't determine configuration: %v", err)
+			log.Fatal("Couldn't determine configuration: %w", err)
 	}
 	s := server.NewServer(GlobalConfig, c)
 
@@ -59,14 +60,14 @@ func main() {
 	select {
 	case err := <-srvResult:
 		if err != nil {
-			log.Fatal("Failed to serve for %s: %v", c.ListenAddr, err)
+			log.Fatal("Failed to serve for %s: %w", c.ListenAddr, err)
 		} else {
 			log.Info("HTTP server shut down")
 		}
 	case sig := <-signals:
 		log.Info("Shutting down due to signal: %s", sig)
 		if err := server.StopServer(srv); err != nil {
-			log.Info("Failed to shut down HTTP server: %v", err)
+			log.Info("Failed to shut down HTTP server: %w", err)
 		}
 	}
 }

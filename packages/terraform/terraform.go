@@ -36,7 +36,7 @@ func runTerraformInitRoutine(moduleDir, terraformCommand string) error {
 
   err := cmd.Run()
 
-  log.Info("Terraform stdout: %s", stdout.String())
+  l.Printf("Terraform stdout: %s", stdout.String())
   if stderr.String() != "" {
     log.Info("Terraform stderr: %s", stderr.String())
   }

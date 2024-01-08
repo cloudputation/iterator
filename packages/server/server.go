@@ -271,7 +271,7 @@ func (s *Server) amFiring(amMsg *template.Data) []error {
       }
 
       if s.config.Verbose {
-          log.Info("Executing:", cmd)
+          log.Info("Executing: %s", cmd)
       }
 
       fingerprint, _ := cmd.Fingerprint(amMsg)
@@ -381,7 +381,7 @@ func (s *Server) handleWebhook(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	log.Info("Alert template: %#v", amMsg)
+	log.Debug("Alert template: %#v", amMsg)
 
 	var errors []error
 	switch amMsg.Status {

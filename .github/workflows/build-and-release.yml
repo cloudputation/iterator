@@ -25,6 +25,20 @@ jobs:
     - name: Build Binary
       run: make build
 
+    - name: Log in to Docker Hub
+      uses: docker/login-action@v3
+      with:
+        username: cloudputation
+        password: ${{ secrets.ITERATOR_DOCKER_CI }}
+
+    - name: Build and push Docker image
+      uses: docker/build-push-action@v5
+      with:
+        push: true
+        tags: cloudputation/iterator:${{ env.VERSION }}
+        build-args:
+          - PRODUCT_VERSION=${{ env.VERSION }}
+
     - name: Create Release
       uses: softprops/action-gh-release@v1
       with:

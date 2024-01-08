@@ -8,6 +8,8 @@ iterator
 
 # Test binary, built with `go test -c`
 *.test
+GIT_CONTROLS/
+.on-save.json
 iterator.log
 tests/
 data/

@@ -29,11 +29,11 @@ RUN addgroup -g 991 ${SERVICE_USERNAME} \
     && adduser -D -u 991 -G ${SERVICE_USERNAME} ${SERVICE_USERNAME}
 
 # Copy artifacts from builder
-COPY ./API_VERSION ./API_VERSION
-COPY ./artifacts/terraform ${TERRAFORM_PATH}
-COPY ./artifacts/terragrunt ${TERRAGRUNT_PATH}
-COPY ./build/iterator /bin/iterator
-COPY ./.release/defaults/example.config.hcl /etc/iterator/config.hcl
+COPY API_VERSION ./API_VERSION
+COPY artifacts/terraform ${TERRAFORM_PATH}
+COPY artifacts/terragrunt ${TERRAGRUNT_PATH}
+COPY build/iterator /bin/iterator
+COPY .release/defaults/example.config.hcl /etc/iterator/config.hcl
 COPY .release/docker/docker-entrypoint.sh /bin/docker-entrypoint.sh
 
 # Set permissions

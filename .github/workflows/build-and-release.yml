@@ -29,7 +29,7 @@ jobs:
         wget -O- https://apt.releases.hashicorp.com/gpg | sudo gpg --dearmor -o /usr/share/keyrings/hashicorp-archive-keyring.gpg
         echo "deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/hashicorp.list
         sudo apt update && sudo apt install terraform
-        mv /usr/bin/terraform ./artifacts/terraform
+        sudo mv /usr/bin/terraform ./artifacts/terraform
 
 
     - name: Download Terragrunt
@@ -37,7 +37,7 @@ jobs:
         wget https://github.com/gruntwork-io/terragrunt/releases/download/v0.54.12/terragrunt_linux_amd64 -O terragrunt_linux_amd64
         chmod +x terragrunt_linux_amd64
         mkdir -p ./artifacts
-        mv terragrunt_linux_amd64 ./artifacts/terragrunt
+        sudo mv terragrunt_linux_amd64 ./artifacts/terragrunt
 
     - name: Build Binary
       run: make build

@@ -121,6 +121,3 @@ Basic prometheus format metrics can be collected at http://iterator_address:9595
 `am_executor_skipped_total`<br>
 `promhttp_metric_handler_errors_total`<br>
 `promhttp_metric_handler_errors_total`<br>
-
-## Code of Conduct
-[Code of Conduct](CODE_OF_CONDUCT.md).

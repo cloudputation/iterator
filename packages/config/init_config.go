@@ -40,6 +40,9 @@ type Condition struct {
     Labels          map[string]string
 }
 
+var ConsulFactoryDataDir = "iterator::Data"
+var ConsulStorageEnabled bool
+
 func LoadConfig(configPath string) (*InitConfig, error) {
     config := &InitConfig{}
 
@@ -121,6 +124,7 @@ func processServerBlock(serverBlock *hcl.Block) (map[string]interface{}, error) 
             }
             if consulData != nil {
                 serverData["consul"] = consulData
+                ConsulStorageEnabled = true
             }
         }
     }

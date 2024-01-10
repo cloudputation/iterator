@@ -23,6 +23,7 @@ import (
 	"github.com/cloudputation/iterator/packages/config"
 	"github.com/cloudputation/iterator/packages/countermap"
 	log "github.com/cloudputation/iterator/packages/logger"
+	"github.com/cloudputation/iterator/packages/storage/consul"
 	"github.com/cloudputation/iterator/packages/terraform"
 )
 
@@ -145,6 +146,11 @@ type Server struct {
 	commandDetails map[string]CommandDetails
 }
 
+var (
+	
+	consulDataDir = config.ConsulFactoryDataDir
+	consulExecutorDir = consulDataDir + "/executor/map/fingerprints"
+)
 // amDataToEnv converts prometheus alert manager template data into key=value strings,
 // which are meant to be set as environment variables of commands called by this program..
 func amDataToEnv(td *template.Data) []string {
@@ -299,49 +305,68 @@ func (s *Server) amFiring(amMsg *template.Data) []error {
 
 // amResolved handles a resolved alert message from alertmanager
 func (s *Server) amResolved(amMsg *template.Data) {
-  dataDir := s.initConfig.Server.DataDir
+	var fingerprintFilePath string
+
+	dataDir := s.initConfig.Server.DataDir
   executorDir := fmt.Sprintf("%s/executor/map/fingerprints", dataDir)
 
   for _, cmd := range s.config.Commands {
+      var fingerprintData struct {
+          Fingerprint string `json:"fingerprint"`
+          Module      string `json:"module"`
+      }
       fingerprint, ok := cmd.Fingerprint(amMsg)
       if !ok || fingerprint == "" {
           continue
       }
 
-      // Construct the file path for the fingerprint JSON file
-      fingerprintFilePath := fmt.Sprintf("%s/%s.json", executorDir, fingerprint)
+      // Fetching fingerprint data based on config.ConsulStorageEnabled
+      switch {
+      case config.ConsulStorageEnabled:
+          kvPath := fmt.Sprintf("%s/%s", consulExecutorDir, fingerprint)
+          data, err := consul.ConsulStoreGet(kvPath)
+          if err != nil {
+              log.Error("Failed to get Fingerprint data from Consul: %w", err)
+              continue
+          }
 
-      // Check if the fingerprint file exists
-      if _, err := os.Stat(fingerprintFilePath); os.IsNotExist(err) {
-          log.Error("Fingerprint file not found: %s", fingerprintFilePath)
-          continue
+          err = json.Unmarshal(data, &fingerprintData)
+          if err != nil {
+              log.Error("Failed to unmarshal fingerprint data: %w", err)
+              continue
+          }
+
+      default:
+          // Construct the file path for the fingerprint JSON file
+          fingerprintFilePath := fmt.Sprintf("%s/%s.json", executorDir, fingerprint)
+
+          // Check if the fingerprint file exists
+          if _, err := os.Stat(fingerprintFilePath); os.IsNotExist(err) {
+              log.Error("Fingerprint file not found: %s", fingerprintFilePath)
+              continue
+          }
+
+          // Read and parse the fingerprint JSON file
+          fileContent, err := os.ReadFile(fingerprintFilePath)
+          if err != nil {
+              log.Error("Failed to read fingerprint file: %w", err)
+              continue
+          }
+
+          err = json.Unmarshal(fileContent, &fingerprintData)
+          if err != nil {
+              log.Error("Failed to unmarshal fingerprint data: %w", err)
+              continue
+          }
       }
 
-      // Read and parse the fingerprint JSON file
-      fileContent, err := os.ReadFile(fingerprintFilePath)
-      if err != nil {
-          log.Error("Error reading fingerprint file: %v", err)
-          continue
-      }
-
-      var fingerprintData struct {
-          Fingerprint string `json:"fingerprint"`
-          Module      string `json:"module"`
-      }
-
-      err = json.Unmarshal(fileContent, &fingerprintData)
-      if err != nil {
-          log.Error("Error unmarshalling fingerprint data: %v", err)
-          continue
-      }
-
+      // Process modulePath and destroy logic
       modulePath := fingerprintData.Module
       if modulePath == "" {
-          log.Info("Module path is empty in fingerprint file")
+          log.Error("Module path is empty in fingerprint file")
           continue
       }
 
-      // Default behavior if DestroyOnResolved is not provided
       destroy := true
       if cmd.DestroyOnResolved != nil {
           destroy = *cmd.DestroyOnResolved
@@ -351,10 +376,29 @@ func (s *Server) amResolved(amMsg *template.Data) {
           go terraform.RunTerraform(modulePath, "destroy")
       }
 
+      // Delete file from disk or remove key from Consul
+      switch {
+      case config.ConsulStorageEnabled:
+          kvPath := fmt.Sprintf("%s/%s", consulExecutorDir, fingerprint)
+          err := consul.ConsulStoreDelete(kvPath)
+          if err != nil {
+              log.Error("Failed to delete key from Consul: %w", err)
+              continue
+          }
+
+      default:
+          err := os.Remove(fingerprintFilePath)
+          if err != nil {
+              log.Error("Failed to delete fingerprint file: %w", err)
+              continue
+          }
+      }
+
       // Close the channel associated with the fingerprint
       s.tellFingers.Close(fingerprint)
   }
 }
+
 
 // handleWebhook is meant to respond to webhook requests from prometheus alertmanager.
 // It unpacks the alert, and dispatches it to the matching programs through environment variables.
@@ -488,7 +532,7 @@ func (s *Server) instrument(fingerprint string, cmd *command.Command, env []stri
 	modulePath := chdirArg[len("-chdir="):]
 	modulePath, err := filepath.Abs(modulePath)
 	if err != nil {
-			log.Fatal("Failed to get absolute path: %v", err)
+			log.Fatal("Failed to get absolute path: %w", err)
 	}
 
 	fingerprintData := map[string]string{
@@ -496,15 +540,25 @@ func (s *Server) instrument(fingerprint string, cmd *command.Command, env []stri
 		"module":      modulePath,
 	}
 
-	data, err := json.Marshal(fingerprintData)
+	data, err := json.MarshalIndent(fingerprintData, "", "	")
 	if err != nil {
-		return fmt.Errorf("Error marshaling fingerprint data: %v", err)
+		return fmt.Errorf("Error marshaling fingerprint data: %w", err)
 	}
 
-	filePath := fmt.Sprintf("%s/%s.json", executorDir, fingerprint)
-	err = os.WriteFile(filePath, data, 0644)
-	if err != nil {
-		return fmt.Errorf("Error writing fingerprint data to file: %v", err)
+	switch {
+	case config.ConsulStorageEnabled:
+		kvPath := fmt.Sprintf("%s/%s", consulExecutorDir, fingerprint)
+		err = consul.ConsulStorePut(kvPath, string(data))
+		if err != nil {
+				return fmt.Errorf("Failed to register fingerprint on Consul: %w", err)
+		}
+
+	default:
+		filePath := fmt.Sprintf("%s/%s.json", executorDir, fingerprint)
+		err = os.WriteFile(filePath, data, 0644)
+		if err != nil {
+			return fmt.Errorf("Error writing fingerprint data to file: %w", err)
+		}
 	}
 
 	return nil
@@ -573,7 +627,6 @@ func (s *Server) Start() (*http.Server, chan error) {
 		commands := make([]string, len(s.config.Commands))
 		for i, e := range s.config.Commands {
 			commands[i] = e.String()
-			log.Info("Runnig server with commands: %s", commands[i])
 		}
 
 

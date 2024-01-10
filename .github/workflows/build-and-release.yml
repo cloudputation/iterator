@@ -31,7 +31,6 @@ jobs:
         sudo apt update && sudo apt install terraform
         sudo mv /usr/bin/terraform ./artifacts/terraform
 
-
     - name: Download Terragrunt
       run: |
         wget https://github.com/gruntwork-io/terragrunt/releases/download/v0.54.12/terragrunt_linux_amd64 -O terragrunt_linux_amd64
@@ -41,27 +40,6 @@ jobs:
 
     - name: Build Binary
       run: make build
-
-    - name: Log in to Docker Hub
-      uses: docker/login-action@v3
-      with:
-        username: cloudputation
-        password: ${{ secrets.ITERATOR_DOCKER_CI }}
-
-    - name: Check Binary
-      run: ls ./build && pwd
-
-    # - name: Build and push Docker image
-    #   uses: docker/build-push-action@v5
-    #   with:
-    #     push: true
-    #     tags: cloudputation/iterator:${{ env.VERSION }}
-
-    - name: Build Docker Container
-      run: make docker-build
-
-    - name: Push Docker Container
-      run: make docker-push
 
     - name: Create Release
       uses: softprops/action-gh-release@v1
@@ -75,3 +53,15 @@ jobs:
           build/iterator
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Log in to Docker Hub
+      uses: docker/login-action@v3
+      with:
+        username: cloudputation
+        password: ${{ secrets.ITERATOR_DOCKER_CI }}
+
+    - name: Build Docker Container
+      run: make docker-build
+
+    - name: Publish Docker Container
+      run: make docker-push

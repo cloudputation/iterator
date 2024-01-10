@@ -19,7 +19,7 @@ func InitTerraform(cfg *config.InitConfig) {
           moduleDir := t.Source
           for _, command := range terraformRoutine {
               if err := runTerraformInitRoutine(moduleDir, command); err != nil {
-                  log.Info("Failed to initialize Terraform module %s: %v", moduleDir, err)
+                  log.Error("Failed to initialize Terraform module %s: %v", moduleDir, err)
               }
           }
       }(task)
@@ -38,7 +38,7 @@ func runTerraformInitRoutine(moduleDir, terraformCommand string) error {
 
   l.Printf("Terraform stdout: %s", stdout.String())
   if stderr.String() != "" {
-    log.Info("Terraform stderr: %s", stderr.String())
+    log.Error("Terraform stderr: %s", stderr.String())
   }
 
   if err != nil {
@@ -67,7 +67,7 @@ func RunTerraform(moduleDir, terraformCommand string) error {
 
   l.Printf("Terraform stdout: %s", stdout.String())
   if stderr.String() != "" {
-    log.Info("Terraform stderr: %s", stderr.String())
+    log.Error("Terraform stderr: %s", stderr.String())
   }
 
   if err != nil {

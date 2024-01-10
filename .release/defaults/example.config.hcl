@@ -6,7 +6,7 @@ server {
   listen    = "9595"
   terraform_driver  = "terraform"
   consul {
-    address = "localhost:8500"
+    address = "10.100.200.210:8500"
   }
 }
 
@@ -18,12 +18,15 @@ task {
     // Set to false to prevent non-zero exit codes from this command, from notifying alertmanager that the command failed.
     // Notifying alertmanager (HTTP 500) is likely to re-dispatch the alarm back to am-executor.
     notify_on_failure = false
+
     // Send a SIGUSR1 signal to the process if it's still running when the triggering alert resolves.
     // Default signal when not specified is SIGKILL.
-    resolved_signal   = "SIGUSR1"
+    resolved_signal   = "SIGKILL"
+
     // Don't signal command if a matching 'resolved' message is
     // sent from alertmanager while this command is still running.
     ignore_resolved   = true
+
     // User defined labels that match an alert
     label {
       alertname = "my_cool_alert"

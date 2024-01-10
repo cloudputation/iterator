@@ -11,8 +11,10 @@ Leverage modern and robust monitoring tools that can send alerts to Alertmanager
 Automate immediate actions on incidents whether they are small or disatreous and revoke or destroy resources upon suspicious activity.
 ### Design an infrastructure that evolves with your company
 Align capacity planning and different architectures that are relevant to your organization's context like a minimalistic cloud deployment when in early stages to a full blown infrastructure in later phases.
+### Design an infrastructure that evolves with your product
+Orchestrate your infrastructures based your application's usage data by using Iterator as part of your backend logic, making it natural to extend it to other infrastructure technologies and service providers.
 ### Start building towards Higly Iterable lifecycles
-Integrate deeply your infratructure with your application's roadmap by codifying business decisions like the expansion of your application. Use Iterator to deploy your infrastructure to a new region to follow your users geographically by sensing your application's popularity across the globe.
+Integrate deeply your infratructure lifecycle with your application's roadmap by codifying business decisions like the expansion of your application. Use Iterator to deploy your infrastructure to a new region to follow your users geographically by sensing your application's popularity across the globe.
 
 ### OS upport
 Iterator is only available for Linux.

@@ -10,7 +10,7 @@ import (
 
 func InitStorage(cfg *config.InitConfig) {
   dataDir := cfg.Server.DataDir
-  executorDir := fmt.Sprintf("%s/executor/map/fingerprints", dataDir)
+  executorDir := fmt.Sprintf("%s/process/alerts", dataDir)
 
   dataDirectories := []string{dataDir, executorDir}
 

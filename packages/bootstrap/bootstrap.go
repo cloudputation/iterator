@@ -7,10 +7,10 @@ import (
 	"os/signal"
 
 	"github.com/cloudputation/iterator/packages/config"
+  "github.com/cloudputation/iterator/packages/consul"
 	log "github.com/cloudputation/iterator/packages/logger"
 	"github.com/cloudputation/iterator/packages/server"
 	"github.com/cloudputation/iterator/packages/storage"
-  "github.com/cloudputation/iterator/packages/storage/consul"
 	"github.com/cloudputation/iterator/packages/terraform"
 )
 

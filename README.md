@@ -12,7 +12,7 @@ Automate immediate actions on incidents whether they are small or disatreous and
 ### Design an infrastructure that evolves with your company
 Align capacity planning and different architectures that are relevant to your organization's context like a minimalistic cloud deployment when in early stages to a full blown infrastructure in later phases.
 ### Design an infrastructure that evolves with your product
-Orchestrate your infrastructures based your application's usage data by using Iterator as part of your backend logic, making it natural to extend it to other infrastructure technologies and service providers.
+Orchestrate your infrastructure based your application's usage data by using Iterator as part of your backend logic, making it natural to extend it to other infrastructure technologies and service providers.
 ### Start building towards Higly Iterable lifecycles
 Integrate deeply your infratructure lifecycle with your application's roadmap by codifying business decisions like the expansion of your application. Use Iterator to deploy your infrastructure to a new region to follow your users geographically by sensing your application's popularity across the globe.
 
@@ -97,8 +97,26 @@ sudo docker run -d \
 ```
 
 ## Consul Backend
-Iterator uses Consul as storage backend.
+Iterator can use Consul as storage backend.
+### Consul-Terraform-Sync integration
+When enabled, Iterator can serve as a bridge for CTS. Simply replace <alertname> for the actual alert name. CTS can now also operate on alerts.
+```hcl
+task {
+  name        = "consul_kv_condition_task"
+  description = "execute on changes to Consul KV entry"
+  module      = "path/to/consul-kv-module"
+  providers   = ["my-provider"]
 
+  condition "consul-kv" {
+    path                = "iterator::Data/process/alerts/<alertname>"
+    recurse             = false
+    datacenter          = "dc1"
+    namespace           = "default"
+    use_as_module_input = true
+  }
+}
+```
+Please review [CTS documentation](https://developer.hashicorp.com/consul/docs/nia/tasks#consul-kv-condition) to learn more about configuring tasks based on Consul's KV store.
 
 ## Application Metrics
 Basic prometheus format metrics can be collected at http://iterator_address:9595/metrics

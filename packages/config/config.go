@@ -64,7 +64,6 @@ func mergeConfigs(all ...*Config) *Config {
 	return merged
 }
 
-
 // readConfig reads configuration from supported means (cli flags, config file),
 // validates parameters and returns a Config struct.
 func ReadConfig(configFile string) (*Config, error) {

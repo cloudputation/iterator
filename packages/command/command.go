@@ -12,6 +12,7 @@ import (
 	"sync"
 	"syscall"
 	"unicode"
+
 	log "github.com/cloudputation/iterator/packages/logger"
 )
 

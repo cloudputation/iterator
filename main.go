@@ -6,8 +6,8 @@ import (
 )
 
 func main() {
-    rootCmd := cli.SetupRootCommand()
-    if err := rootCmd.Execute(); err != nil {
-        l.Fatal("Error executing command: %v", err)
-    }
+  rootCmd := cli.SetupRootCommand()
+  if err := rootCmd.Execute(); err != nil {
+      l.Fatal("Error executing command: %v", err)
+  }
 }

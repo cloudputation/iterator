@@ -21,9 +21,9 @@ import (
 	"github.com/cloudputation/iterator/packages/chanmap"
 	"github.com/cloudputation/iterator/packages/command"
 	"github.com/cloudputation/iterator/packages/config"
+  "github.com/cloudputation/iterator/packages/consul"
 	"github.com/cloudputation/iterator/packages/countermap"
 	log "github.com/cloudputation/iterator/packages/logger"
-	"github.com/cloudputation/iterator/packages/storage/consul"
 	"github.com/cloudputation/iterator/packages/terraform"
 )
 
@@ -48,7 +48,7 @@ const (
 
 const (
 	// Namespace for prometheus metrics produced by this program
-	metricNamespace    = "am_executor"
+	metricNamespace    = "iterator"
 
 	ErrLabelRead       = "read"
 	ErrLabelUnmarshall = "unmarshal"
@@ -147,24 +147,24 @@ type Server struct {
 }
 
 var (
-	
 	consulDataDir = config.ConsulFactoryDataDir
-	consulExecutorDir = consulDataDir + "/executor/map/fingerprints"
+	consulExecutorDir = consulDataDir + "/process/alerts"
 )
+
 // amDataToEnv converts prometheus alert manager template data into key=value strings,
 // which are meant to be set as environment variables of commands called by this program..
 func amDataToEnv(td *template.Data) []string {
   env := []string{
-      "TF_VAR_AMX_RECEIVER=" + td.Receiver,
-      "TF_VAR_AMX_STATUS=" + td.Status,
-      "TF_VAR_AMX_EXTERNAL_URL=" + td.ExternalURL,
-      "TF_VAR_AMX_ALERT_LEN=" + strconv.Itoa(len(td.Alerts)),
+      "TF_VAR_ITERATOR_ALERT_RECEIVER=" + td.Receiver,
+      "TF_VAR_ITERATOR_ALERT_STATUS=" + td.Status,
+      "TF_VAR_ITERATOR_ALERT_EXTERNAL_URL=" + td.ExternalURL,
+      "TF_VAR_ITERATOR_ALERT_ALERT_LEN=" + strconv.Itoa(len(td.Alerts)),
   }
 
   for prefix, mappings := range map[string]map[string]string{
-      "AMX_LABEL":      td.CommonLabels,
-      "AMX_GLABEL":     td.GroupLabels,
-      "AMX_ANNOTATION": td.CommonAnnotations,
+      "ITERATOR_ALERT_LABEL":      td.CommonLabels,
+      "ITERATOR_ALERT_GLABEL":     td.GroupLabels,
+      "ITERATOR_ALERT_ANNOTATION": td.CommonAnnotations,
   } {
       for k, v := range mappings {
           envVarName := "TF_VAR_" + prefix + "_" + k
@@ -173,7 +173,7 @@ func amDataToEnv(td *template.Data) []string {
   }
 
   for i, alert := range td.Alerts {
-      keyPrefix := "TF_VAR_AMX_ALERT_" + strconv.Itoa(i+1)
+      keyPrefix := "TF_VAR_ITERATOR_ALERT_ALERT_" + strconv.Itoa(i+1)
       env = append(env,
           keyPrefix+"_STATUS"+"="+alert.Status,
           keyPrefix+"_START"+"="+timeToStr(alert.StartsAt),
@@ -284,7 +284,7 @@ func (s *Server) amFiring(amMsg *template.Data) []error {
       out := make(chan command.CommandResult)
       wg.Add(1)
       go collect(future{cmd: cmd, out: out})
-      go s.instrument(fingerprint, cmd, env, out)
+      go s.instrument(fingerprint, cmd, env, out, amMsg)
 
       // Store command details in a map
       s.commandDetails[fingerprint] = CommandDetails{
@@ -306,9 +306,9 @@ func (s *Server) amFiring(amMsg *template.Data) []error {
 // amResolved handles a resolved alert message from alertmanager
 func (s *Server) amResolved(amMsg *template.Data) {
 	var fingerprintFilePath string
-
+	var alertname = amMsg.Alerts[0].Labels["alertname"]
 	dataDir := s.initConfig.Server.DataDir
-  executorDir := fmt.Sprintf("%s/executor/map/fingerprints", dataDir)
+  executorDir := fmt.Sprintf("%s/process/alerts", dataDir)
 
   for _, cmd := range s.config.Commands {
       var fingerprintData struct {
@@ -323,7 +323,7 @@ func (s *Server) amResolved(amMsg *template.Data) {
       // Fetching fingerprint data based on config.ConsulStorageEnabled
       switch {
       case config.ConsulStorageEnabled:
-          kvPath := fmt.Sprintf("%s/%s", consulExecutorDir, fingerprint)
+          kvPath := fmt.Sprintf("%s/%s", consulExecutorDir, alertname)
           data, err := consul.ConsulStoreGet(kvPath)
           if err != nil {
               log.Error("Failed to get Fingerprint data from Consul: %w", err)
@@ -338,7 +338,7 @@ func (s *Server) amResolved(amMsg *template.Data) {
 
       default:
           // Construct the file path for the fingerprint JSON file
-          fingerprintFilePath := fmt.Sprintf("%s/%s.json", executorDir, fingerprint)
+          fingerprintFilePath := fmt.Sprintf("%s/%s.json", executorDir, alertname)
 
           // Check if the fingerprint file exists
           if _, err := os.Stat(fingerprintFilePath); os.IsNotExist(err) {
@@ -379,13 +379,12 @@ func (s *Server) amResolved(amMsg *template.Data) {
       // Delete file from disk or remove key from Consul
       switch {
       case config.ConsulStorageEnabled:
-          kvPath := fmt.Sprintf("%s/%s", consulExecutorDir, fingerprint)
+          kvPath := fmt.Sprintf("%s/%s", consulExecutorDir, alertname)
           err := consul.ConsulStoreDelete(kvPath)
           if err != nil {
               log.Error("Failed to delete key from Consul: %w", err)
               continue
           }
-
       default:
           err := os.Remove(fingerprintFilePath)
           if err != nil {
@@ -425,7 +424,8 @@ func (s *Server) handleWebhook(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	log.Debug("Alert template: %#v", amMsg)
+	log.Info("Alert template: %#v", amMsg)
+	log.Info("Alertname is: %#v", amMsg.Alerts[0].Labels["alertname"])
 
 	var errors []error
 	switch amMsg.Status {
@@ -475,14 +475,14 @@ func (s *Server) initMetrics() error {
 //
 // The prometheus structs use sync/atomic in methods like Dec and Observe,
 // so they're safe to call concurrently from goroutines.
-func (s *Server) instrument(fingerprint string, cmd *command.Command, env []string, out chan<- command.CommandResult) error {
+func (s *Server) instrument(fingerprint string, cmd *command.Command, env []string, out chan<- command.CommandResult, amMsg *template.Data) error {
 	if s.initConfig != nil && s.initConfig.Server != nil && s.initConfig.Server.DataDir != "" {
 		dataDir = s.initConfig.Server.DataDir
    	log.Debug("Data dir is: %s", dataDir)
 	} else {
     dataDir = "./data"
 	}
-	executorDir := fmt.Sprintf("%s/executor/map/fingerprints", dataDir)
+	executorDir := fmt.Sprintf("%s/process/alerts", dataDir)
 
 	verbose := s.config.Verbose
 	s.processCurrent.Inc()
@@ -547,12 +547,12 @@ func (s *Server) instrument(fingerprint string, cmd *command.Command, env []stri
 
 	switch {
 	case config.ConsulStorageEnabled:
-		kvPath := fmt.Sprintf("%s/%s", consulExecutorDir, fingerprint)
+		// var amMsg = &template.Data{}
+		kvPath := fmt.Sprintf("%s/%s", consulExecutorDir, amMsg.Alerts[0].Labels["alertname"])
 		err = consul.ConsulStorePut(kvPath, string(data))
 		if err != nil {
 				return fmt.Errorf("Failed to register fingerprint on Consul: %w", err)
 		}
-
 	default:
 		filePath := fmt.Sprintf("%s/%s.json", executorDir, fingerprint)
 		err = os.WriteFile(filePath, data, 0644)

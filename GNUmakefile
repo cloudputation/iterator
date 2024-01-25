@@ -70,7 +70,7 @@ spell: ## misspell
 .PHONY: lint
 lint: ## golangci-lint
 	$(call print-target)
-	golangci-lint run --fix
+	-golangci-lint run --fix
 
 .PHONY: test
 test: ## go test

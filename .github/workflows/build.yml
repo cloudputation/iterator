@@ -41,7 +41,7 @@ jobs:
         path: |
           ./artifacts/terraform
           ./artifacts/terragrunt
-        key: ${{ runner.os }}-tools-${{ hashFiles('**/checksums.txt') }}
+        key: ${{ runner.os }}-terraform-terragrunt-${{ env.TERRAGRUNT_VERSION }}
 
     - name: Install Terraform (if not cached)
       if: steps.cache-tools.outputs.cache-hit != 'true'

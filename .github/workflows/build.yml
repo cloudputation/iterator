@@ -43,6 +43,14 @@ jobs:
           ./artifacts/terragrunt
         key: ${{ runner.os }}-terraform-terragrunt-${{ env.TERRAGRUNT_VERSION }}
 
+    - name: Check Cache Hit
+      run: |
+        if [ "${{ steps.cache-tools.outputs.cache-hit }}" == "true" ]; then
+          echo "Cache hit, using cached Terraform and Terragrunt binaries."
+        else
+          echo "Cache miss, downloading Terraform and Terragrunt binaries."
+        fi
+
     - name: Install Terraform (if not cached)
       if: steps.cache-tools.outputs.cache-hit != 'true'
       run: |
@@ -58,9 +66,10 @@ jobs:
         chmod +x terragrunt
         sudo mv terragrunt ./artifacts/terragrunt
 
-    - name: Check Artifacts
+    - name: Set Ownership and Permissions
       run: |
-        sudo chown runner:docker ./artifacts/*
+        sudo chown -R $(whoami) ./artifacts
+        chmod -R 755 ./artifacts
         ls -l ./artifacts
 
     - name: Build

@@ -29,11 +29,16 @@ IMAGE_DISTRIBUTOR := cloudputation
 
 # Phony targets for make commands
 .PHONY: all
-all: mod inst gen build spell lint test ## run all targets
+all: gen build spell lint test ## run all targets
 
 # CI build pipeline
 .PHONY: ci
 ci: all diff ## run CI pipeline
+
+# Setup-CI sets up the dependencies for CI pipeline
+.PHONY: setup-ci
+setup-ci: mod inst ## Prepare dependencies for CI pipeline
+
 
 # Extract release changelog
 .PHONY: changelog

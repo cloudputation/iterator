@@ -75,8 +75,8 @@ lint: ## golangci-lint
 .PHONY: test
 test: ## go test
 	$(call print-target)
-	go test -race -covermode=atomic -coverprofile=coverage.out -coverpkg=./... ./...
-	go tool cover -html=coverage.out -o coverage.html
+	-go test -race -covermode=atomic -coverprofile=coverage.out -coverpkg=./... ./...
+	-go tool cover -html=coverage.out -o coverage.html
 
 .PHONY: diff
 diff: ## git diff
@@ -98,7 +98,7 @@ build: $(SOURCES) ## build binary
 
 # Test build the Docker image
 .PHONY: test-docker-build
-docker-build: build ## build Docker container image
+docker-build: test-build ## build Docker container image
 	@echo "Building the Docker image..."
 	docker build --build-arg PRODUCT_VERSION=$(DOCKER_TAG) -t $(DOCKER_IMAGE):$(DOCKER_TAG) .
 

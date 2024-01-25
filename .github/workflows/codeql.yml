@@ -3,6 +3,9 @@ name: "CodeQL"
 on:
   push:
     branches: [ main ]
+    paths:
+      - 'main.go'
+      - 'packages/**/*.go'
   pull_request:
     # The branches below must be a subset of the branches above
     branches: [ main ]

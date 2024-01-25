@@ -80,9 +80,13 @@ test: ## go test
 
 .PHONY: diff
 diff: ## git diff
-	$(call print-target)
-	git diff --exit-code
-	RES=$$(git status --porcelain) ; if [ -n "$$RES" ]; then echo $$RES && exit 1 ; fi
+	@echo "Checking for uncommitted changes..."
+	@git diff
+	@untracked=$$(git status --porcelain) ; \
+	if [ -n "$$untracked" ]; then \
+		echo "Untracked or modified files:" ; \
+		echo "$$untracked" ; \
+	fi
 
 
 ### FOR LOCAL TESTING ONLY

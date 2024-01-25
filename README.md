@@ -132,9 +132,9 @@ Basic prometheus format metrics can be collected at http://iterator_address:9595
 `am_executor_process_duration_seconds_sum`<br>
 `am_executor_process_duration_seconds_count`<br>
 `am_executor_processes_current`<br>
-`am_executor_signalled_total`<br>
-`am_executor_signalled_total`<br>
-`am_executor_signalled_total`<br>
+`am_executor_signaled_total`<br>
+`am_executor_signaled_total`<br>
+`am_executor_signaled_total`<br>
 `am_executor_skipped_total`<br>
 `am_executor_skipped_total`<br>
 `promhttp_metric_handler_errors_total`<br>

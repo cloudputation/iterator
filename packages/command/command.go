@@ -9,7 +9,6 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"sync"
 	"syscall"
 	"unicode"
 
@@ -98,6 +97,10 @@ type Command struct {
 	ResolvedSig    string `yaml:"resolved_signal"`
 	// Evaluate if terraform destroy should be run
 	DestroyOnResolved *bool `yaml:"destroy_on_resolved,omitempty"`
+	// Available scheduling modes based on alert status
+	// Regular, firing -> apply, resolved -> destroy
+	// Sawtooth, firing -> apply, resolved -> ignore
+	TerraformScheduling string `yaml:"terraform_scheduling,omitempty"`
 }
 
 // Return a string representing the result state
@@ -171,32 +174,29 @@ func (c Command) Equal(other *Command) bool {
 
 // Fingerprint returns the fingerprint of the first alarm that matches the command's labels.
 // The first fingerprint found is returned if we have no MatchLabels defined.
-func (c Command) Fingerprint(msg *template.Data) (string, bool) {
-	for _, alert := range msg.Alerts {
-		matched := 0
-		for k, v := range c.MatchLabels {
-			other, ok := alert.Labels[k]
-			if ok && v == other {
-				matched += 1
-			}
-		}
-		if matched == len(c.MatchLabels) {
-			return alert.Fingerprint, true
-		}
-	}
-
-	return "", false
+func (c Command) FingerprintForAlert(alert *template.Alert) (string, bool) {
+    matched := 0
+    for k, v := range c.MatchLabels {
+        other, ok := alert.Labels[k]
+        if ok && v == other {
+            matched++
+        }
+    }
+    if matched == len(c.MatchLabels) {
+        return alert.Fingerprint, true
+    }
+    return "", false
 }
 
 // Matches returns true if the specified labels in MatchLabels are present and match their values in the prometheus alert message.
 // If MatchLabels is empty, it returns true.
-func (c Command) Matches(msg *template.Data) bool {
+func (c Command) Matches(alert *template.Alert) bool {
   if len(c.MatchLabels) == 0 {
       return true
   }
 
   for k, v := range c.MatchLabels {
-      if value, ok := msg.CommonLabels[k]; !ok || value != v {
+		if value, ok := alert.Labels[k]; !ok || value != v {
           return false
       }
   }
@@ -208,57 +208,51 @@ func (c Command) Matches(msg *template.Data) bool {
 // out channel is used to indicate the result of running or killing the program. May indicate errors.
 // quit channel is used to determine if execution should quit early
 // done channel is used to indicate to caller when execution has completed
-func (c Command) Run(out chan<- CommandResult, quit chan struct{}, done chan struct{}, verbose bool, env ...string) {
-	defer close(out)
-	defer close(done)
-	var wg sync.WaitGroup
+func (c Command) Run(out chan<- CommandResult, quit chan struct{}, done chan struct{}, env ...string) {
+    defer close(out)
+    defer close(done)
 
-	if verbose {
-			for _, e := range env {
-					log.Info("Running Terraform command with environment variable: %s", e)
-			}
-	}
+    for _, e := range env {
+        log.Info("Running command with environment variable: %s", e)
+    }
 
-	cmd := c.WithEnv(env...)
-	// We use a buffer of one, so that if the command is killed before it finishes,
-	// we will still be able to close the channel and end the Command.Run method;
-	// There won't be a channel reader left, because the select statement ended when quit was read from.
-	cmdOut := make(chan CommandResult, 1)
-	wg.Add(1)
-	go func() {
-		defer close(cmdOut)
-		defer wg.Done()
-		err := cmd.Run()
-		if err == nil {
-			cmdOut <- CommandResult{Kind: CmdOk, Err: nil}
-		} else {
-			cmdOut <- CommandResult{Kind: CmdFail, Err: err}
-		}
-	}()
+    // Setting up the command with the environment variables.
+    cmd := c.WithEnv(env...)
 
-	select {
-	case r := <-cmdOut:
-		out <- r
-	case <-quit:
-		if c.ShouldIgnoreResolved() {
-			out <- CommandResult{Kind: CmdSkipSig, Err: nil}
-		} else {
-			sig, err := c.ParseSignal()
-			if err != nil {
-				errMsg := fmt.Errorf("Can't use signal %s to notify pid %d for command %s: %w", c.ResolvedSig, cmd.Process.Pid, c, err)
-				out <- CommandResult{Kind: CmdSigFail, Err: errMsg}
-			}
-			err = cmd.Process.Signal(sig)
-			if err == nil {
-				out <- CommandResult{Kind: CmdSigOk, Err: nil}
-			} else {
-				errMsg := fmt.Errorf("Failed sending %s to pid %d for command %s: %w", sig, cmd.Process.Pid, c, err)
-				out <- CommandResult{Kind: CmdSigFail, Err: errMsg}
-			}
-		}
-	}
-	wg.Wait()
+    // Executing the command.
+    err := cmd.Run()
+    if err == nil {
+        out <- CommandResult{Kind: CmdOk, Err: nil}
+    } else {
+        out <- CommandResult{Kind: CmdFail, Err: err}
+    }
+
+    // Handling the quit signal.
+    select {
+    case <-quit:
+        if c.ShouldIgnoreResolved() {
+            out <- CommandResult{Kind: CmdSkipSig, Err: nil}
+        } else {
+            sig, err := c.ParseSignal()
+            if err != nil {
+                errMsg := fmt.Errorf("Can't use signal %s to notify pid %d for command %s: %w", c.ResolvedSig, cmd.Process.Pid, c, err)
+                out <- CommandResult{Kind: CmdSigFail, Err: errMsg}
+            } else {
+                err = cmd.Process.Signal(sig)
+                if err == nil {
+                    out <- CommandResult{Kind: CmdSigOk, Err: nil}
+                } else {
+                    errMsg := fmt.Errorf("Failed sending %s to pid %d for command %s: %w", sig, cmd.Process.Pid, c, err)
+                    out <- CommandResult{Kind: CmdSigFail, Err: errMsg}
+                }
+            }
+        }
+    default:
+        // If no quit signal, just continue.
+    }
 }
+
+
 
 // ShouldIgnoreResolved returns the interpreted value of c.IgnoreResolved.
 // This method is used to work around ambiguity of unmarshalling yaml boolean values,

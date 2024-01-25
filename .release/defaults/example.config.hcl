@@ -15,6 +15,9 @@ task {
   description = "Manage infrastructure for web service"
   source      = "/var/lib/iterator/terraform-data/moduleA"
   condition "label-match" {
+    // Sawtooth Terraform scheduling mode prevents Iterator from destroying a resource when
+    // an alert status is resolved.
+    terraform_scheduling  = "sawtooth"
     // Set to false to prevent non-zero exit codes from this command, from notifying alertmanager that the command failed.
     // Notifying alertmanager (HTTP 500) is likely to re-dispatch the alarm back to am-executor.
     notify_on_failure = false

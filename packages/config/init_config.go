@@ -34,11 +34,16 @@ type Task struct {
 }
 
 type Condition struct {
+    TerraformScheduling string
     NotifyOnFailure bool
     ResolvedSignal  string
     IgnoreResolved  bool
     Labels          map[string]string
 }
+
+const (
+  defaultListenAddr = "9595"
+)
 
 var ConsulFactoryDataDir = "iterator::Data"
 var ConsulStorageEnabled bool
@@ -154,11 +159,15 @@ func processConsulBlock(consulBlock *hcl.Block) (map[string]interface{}, error) 
 
 func populateServerStruct(serverMap map[string]interface{}) *Server {
   server := &Server{
-      Listen: serverMap["listen"].(string),
+      Listen: defaultListenAddr,
       DataDir: serverMap["data_dir"].(string),
       LogLevel: serverMap["log_level"].(string),
       LogDir: serverMap["log_dir"].(string),
       TerraformDriver: serverMap["terraform_driver"].(string),
+  }
+
+  if listen, ok := serverMap["listen"]; ok {
+      server.Listen = listen.(string)
   }
 
   if consul, ok := serverMap["consul"].(map[string]interface{}); ok {
@@ -168,34 +177,6 @@ func populateServerStruct(serverMap map[string]interface{}) *Server {
   }
 
   return server
-}
-
-func populateTaskStruct(taskMap map[string]interface{}) *Task {
-  task := &Task{
-      Name:        taskMap["name"].(string),
-      Description: taskMap["description"].(string),
-      Source:      taskMap["source"].(string),
-  }
-
-  if cond, ok := taskMap["condition"].(map[string]interface{}); ok {
-      task.Condition = populateConditionStruct(cond)
-  }
-
-  return task
-}
-
-func populateConditionStruct(condMap map[string]interface{}) Condition {
-  condition := Condition{
-      NotifyOnFailure: condMap["notify_on_failure"].(bool),
-      ResolvedSignal:  condMap["resolved_signal"].(string),
-      IgnoreResolved:  condMap["ignore_resolved"].(bool),
-  }
-
-  if labels, ok := condMap["labels"].(map[string]string); ok {
-      condition.Labels = labels
-  }
-
-  return condition
 }
 
 func processTaskBlock(taskBlock *hcl.Block) (map[string]interface{}, error) {
@@ -245,6 +226,7 @@ func processConditionBlock(conditionBlock *hcl.Block) (map[string]interface{}, e
   content, _, diags := conditionBlock.Body.PartialContent(&hcl.BodySchema{
       Attributes: []hcl.AttributeSchema{
           {Name: "notify_on_failure"},
+          {Name: "terraform_scheduling"},
           {Name: "resolved_signal"},
           {Name: "ignore_resolved"},
       },
@@ -300,4 +282,36 @@ func processLabelBlock(labelBlock *hcl.Block) (map[string]string, error) {
   }
 
   return labels, nil
+}
+
+func populateTaskStruct(taskMap map[string]interface{}) *Task {
+  task := &Task{
+      Name:        taskMap["name"].(string),
+      Description: taskMap["description"].(string),
+      Source:      taskMap["source"].(string),
+  }
+
+  if cond, ok := taskMap["condition"].(map[string]interface{}); ok {
+      task.Condition = populateConditionStruct(cond)
+  }
+
+  return task
+}
+
+func populateConditionStruct(condMap map[string]interface{}) Condition {
+  condition := Condition{
+      NotifyOnFailure: condMap["notify_on_failure"].(bool),
+      ResolvedSignal:  condMap["resolved_signal"].(string),
+      IgnoreResolved:  condMap["ignore_resolved"].(bool),
+  }
+
+  if terraformScheduling, ok := condMap["terraform_scheduling"]; ok {
+      condition.TerraformScheduling = terraformScheduling.(string)
+  }
+
+  if labels, ok := condMap["labels"].(map[string]string); ok {
+      condition.Labels = labels
+  }
+
+  return condition
 }

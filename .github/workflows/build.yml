@@ -1,0 +1,68 @@
+name: build
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'main.go'
+      - 'packages/**/*.go'
+      - 'Dockerfile'
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      TERRAGRUNT_VERSION: "0.54.12"
+
+    steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: '^1.21'
+
+    - name: Setup Environment
+      run: |
+        echo "VERSION=$(cat VERSION)"
+        mkdir -p ./artifacts
+
+    - name: Cache Terraform and Terragrunt
+      uses: actions/cache@v2
+      id: cache-tools
+      with:
+        path: |
+          ./artifacts/terraform
+          ./artifacts/terragrunt
+        key: ${{ runner.os }}-tools-${{ hashFiles('**/checksums.txt') }}
+
+    - name: Install Terraform (if not cached)
+      if: steps.cache-tools.outputs.cache-hit != 'true'
+      run: |
+        wget -O- https://apt.releases.hashicorp.com/gpg | sudo gpg --dearmor -o /usr/share/keyrings/hashicorp-archive-keyring.gpg
+        echo "deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/hashicorp.list
+        sudo apt update && sudo apt install terraform
+        sudo mv /usr/bin/terraform ./artifacts/terraform
+
+    - name: Download Terragrunt (if not cached)
+      if: steps.cache-tools.outputs.cache-hit != 'true'
+      run: |
+        wget https://github.com/gruntwork-io/terragrunt/releases/download/v${TERRAGRUNT_VERSION}/terragrunt_linux_amd64 -O terragrunt
+        chmod +x terragrunt
+        sudo mv terragrunt ./artifacts/terragrunt
+
+    - name: Check Artifacts
+      run: |
+        ls -l ./artifacts
+
+    - name: Build
+      run: make ci
+
+    - name: Run Goreleaser
+      run: goreleaser release --rm-dist --snapshot
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -9,10 +9,6 @@ import (
 	log "github.com/cloudputation/iterator/packages/logger"
 )
 
-const (
-	defaultListenAddr = "9595"
-)
-
 // Config represents the configuration for this program
 type Config struct {
 	ListenAddr string     `yaml:"listen_address"`
@@ -77,6 +73,16 @@ func ReadConfig(configFile string) (*Config, error) {
             return nil, fmt.Errorf("error reading config file: %w", err)
         }
         c = mergeConfigs(c, fileConfig) // Merge file configuration with default
+				yamlData, err := yaml.Marshal(c)
+				if err != nil {
+						return nil, fmt.Errorf("error marshaling config to YAML: %w", err)
+				}
+
+				// Print the YAML configuration
+				err = log.PrintYAMLLog(string(yamlData))
+				if err != nil {
+						return nil, fmt.Errorf("error printing YAML log: %w", err)
+				}
     }
 
     // Validate the commands in the merged configuration

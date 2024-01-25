@@ -22,6 +22,7 @@ type InitCommand struct {
     ResolvedSignal  string            `yaml:"resolved_signal,omitempty"`
     IgnoreResolved  bool              `yaml:"ignore_resolved,omitempty"`
     Max             int               `yaml:"max,omitempty"`
+  	TerraformScheduling string `yaml:"terraform_scheduling,omitempty"`
 }
 
 func RenderConfig(config *InitConfig, ymlConfigPath string) error {
@@ -43,6 +44,7 @@ func RenderConfig(config *InitConfig, ymlConfigPath string) error {
                 NotifyOnFailure:  task.Condition.NotifyOnFailure,
                 ResolvedSignal:   task.Condition.ResolvedSignal,
                 IgnoreResolved:   task.Condition.IgnoreResolved,
+                TerraformScheduling:   task.Condition.TerraformScheduling,
                 Max:              1,
             }
             yamlConfig.Commands = append(yamlConfig.Commands, cmd)

@@ -30,6 +30,7 @@ import (
 type CommandDetails struct {
     Cmd    string
     Args   []string
+		TerraformScheduling string
 }
 
 const (
@@ -38,7 +39,7 @@ const (
 )
 
 const (
-	// Enum for reasons of why a command could or couldn't run
+	// Enum for reasons for why a command could or couldn't run
 	CmdRunNoLabelMatch CmdRunReason = iota
 	CmdRunNoMax
 	CmdRunNoFinger
@@ -57,7 +58,6 @@ const (
 	SigLabelFail       = "fail"
 )
 
-var dataDir string
 var (
 	CmdRunDesc = map[CmdRunReason]string{
 		CmdRunNoLabelMatch: "No match for alert labels",
@@ -144,27 +144,30 @@ type Server struct {
 	skipCounter *prometheus.CounterVec
 	// Map to store the command details indexed by fingerprint
 	commandDetails map[string]CommandDetails
+  commandDetailsMutex sync.Mutex
 }
 
 var (
+	dataDir string
+	terraformScheduling string
 	consulDataDir = config.ConsulFactoryDataDir
 	consulExecutorDir = consulDataDir + "/process/alerts"
 )
 
 // amDataToEnv converts prometheus alert manager template data into key=value strings,
 // which are meant to be set as environment variables of commands called by this program..
-func amDataToEnv(td *template.Data) []string {
+func amDataToEnvForAlert(alert *template.Alert) []string {
   env := []string{
-      "TF_VAR_ITERATOR_ALERT_RECEIVER=" + td.Receiver,
-      "TF_VAR_ITERATOR_ALERT_STATUS=" + td.Status,
-      "TF_VAR_ITERATOR_ALERT_EXTERNAL_URL=" + td.ExternalURL,
-      "TF_VAR_ITERATOR_ALERT_ALERT_LEN=" + strconv.Itoa(len(td.Alerts)),
+      "TF_VAR_ITERATOR_ALERT_STATUS=" + alert.Status,
+      "TF_VAR_ITERATOR_ALERT_START=" + timeToStr(alert.StartsAt),
+      "TF_VAR_ITERATOR_ALERT_END=" + timeToStr(alert.EndsAt),
+      "TF_VAR_ITERATOR_ALERT_URL=" + alert.GeneratorURL,
+      "TF_VAR_ITERATOR_ALERT_FINGERPRINT=" + alert.Fingerprint,
   }
 
   for prefix, mappings := range map[string]map[string]string{
-      "ITERATOR_ALERT_LABEL":      td.CommonLabels,
-      "ITERATOR_ALERT_GLABEL":     td.GroupLabels,
-      "ITERATOR_ALERT_ANNOTATION": td.CommonAnnotations,
+      "ITERATOR_ALERT_LABEL":      alert.Labels,
+      "ITERATOR_ALERT_ANNOTATION": alert.Annotations,
   } {
       for k, v := range mappings {
           envVarName := "TF_VAR_" + prefix + "_" + k
@@ -172,27 +175,19 @@ func amDataToEnv(td *template.Data) []string {
       }
   }
 
-  for i, alert := range td.Alerts {
-      keyPrefix := "TF_VAR_ITERATOR_ALERT_ALERT_" + strconv.Itoa(i+1)
-      env = append(env,
-          keyPrefix+"_STATUS"+"="+alert.Status,
-          keyPrefix+"_START"+"="+timeToStr(alert.StartsAt),
-          keyPrefix+"_END"+"="+timeToStr(alert.EndsAt),
-          keyPrefix+"_URL"+"="+alert.GeneratorURL,
-          keyPrefix+"_FINGERPRINT"+"="+alert.Fingerprint,
-      )
-      for p, m := range map[string]map[string]string{
-          "LABEL":      alert.Labels,
-          "ANNOTATION": alert.Annotations,
-      } {
-          for k, v := range m {
-              envVarName := keyPrefix + "_" + p + "_" + k
-              env = append(env, envVarName+"="+v)
-          }
-      }
-  }
-
   return env
+}
+
+// Give default to CommandDetails
+func DefaultCommandDetails(cmd string, args []string, terraformScheduling string) CommandDetails {
+    if terraformScheduling == "" {
+        terraformScheduling = "default" // Replace 'default_value' with the actual default value you want
+    }
+    return CommandDetails{
+        Cmd:                 cmd,
+        Args:                args,
+        TerraformScheduling: terraformScheduling,
+    }
 }
 
 // concatErrors returns an error representing all of the errors' strings
@@ -240,9 +235,10 @@ func (r CmdRunReason) String() string {
 }
 
 // amFiring handles a triggered alert message from alertmanager
-func (s *Server) amFiring(amMsg *template.Data) []error {
+func (s *Server) amFiring(alert *template.Alert) []error {
   var wg sync.WaitGroup
-  var env = amDataToEnv(amMsg)
+  var allErrors = make([]error, 0)
+  env := amDataToEnvForAlert(alert)
 
   type future struct {
       cmd *command.Command
@@ -250,7 +246,6 @@ func (s *Server) amFiring(amMsg *template.Data) []error {
   }
 
   var errors = make(chan error)
-  var allErrors = make([]error, 0)
 
   var collect = func(f future) {
       defer wg.Done()
@@ -267,34 +262,45 @@ func (s *Server) amFiring(amMsg *template.Data) []error {
   }
 
   for _, cmd := range s.config.Commands {
-      ok, reason := s.CanRun(cmd, amMsg)
+      ok, reason := s.CanRun(cmd, alert)
       if !ok {
-          if s.config.Verbose {
-              log.Info("Skipping command due to '%s': %s", reason, cmd)
-          }
+          log.Info("Skipping command due to '%s': %s", reason, cmd)
           s.skipCounter.WithLabelValues(reason.Label()).Inc()
           continue
       }
 
-      if s.config.Verbose {
-          log.Info("Executing: %s", cmd)
+      log.Info("Executing Terraform module: %s for alert: %s", cmd.Args, alert.Labels["alertname"])
+
+      fingerprint, ok := cmd.FingerprintForAlert(alert)
+      if !ok {
+					log.Info("Failed to get fingertprint for alert: %s. Skipping..", alert.Labels["alertname"])
+          continue
       }
 
-      fingerprint, _ := cmd.Fingerprint(amMsg)
+			log.Info("Setting commandDetails for fingerprint: %s, command: %s, args: %v", fingerprint, cmd.Cmd, cmd.Args)
+			commandDetails := DefaultCommandDetails(cmd.Cmd, cmd.Args, cmd.TerraformScheduling)
+
+      s.commandDetailsMutex.Lock()
+      s.commandDetails[fingerprint] = commandDetails
+      s.commandDetailsMutex.Unlock()
+
       out := make(chan command.CommandResult)
       wg.Add(1)
       go collect(future{cmd: cmd, out: out})
-      go s.instrument(fingerprint, cmd, env, out, amMsg)
 
-      // Store command details in a map
-      s.commandDetails[fingerprint] = CommandDetails{
-          Cmd:    cmd.Cmd,
-          Args:   cmd.Args,
+      err := s.instrument(fingerprint, cmd, env, out, *alert)
+      if err != nil {
+          allErrors = append(allErrors, err)
+          continue
       }
+
+
   }
 
-  wg.Wait()
-  close(errors)
+  go func() {
+      wg.Wait()
+      close(errors)
+  }()
 
   for err := range errors {
       allErrors = append(allErrors, err)
@@ -303,24 +309,27 @@ func (s *Server) amFiring(amMsg *template.Data) []error {
   return allErrors
 }
 
+
 // amResolved handles a resolved alert message from alertmanager
-func (s *Server) amResolved(amMsg *template.Data) {
-	var fingerprintFilePath string
-	var alertname = amMsg.Alerts[0].Labels["alertname"]
-	dataDir := s.initConfig.Server.DataDir
+func (s *Server) amResolved(alert template.Alert) {
+  dataDir := s.initConfig.Server.DataDir
   executorDir := fmt.Sprintf("%s/process/alerts", dataDir)
+  alertname := alert.Labels["alertname"]
 
   for _, cmd := range s.config.Commands {
-      var fingerprintData struct {
-          Fingerprint string `json:"fingerprint"`
-          Module      string `json:"module"`
+      var alertParameters struct {
+          Fingerprint        string `json:"fingerprint"`
+          Module             string `json:"module"`
+          TerraformScheduling string `json:"terraform_scheduling"`
       }
-      fingerprint, ok := cmd.Fingerprint(amMsg)
+
+      fingerprint, ok := cmd.FingerprintForAlert(&alert)
       if !ok || fingerprint == "" {
           continue
       }
 
-      // Fetching fingerprint data based on config.ConsulStorageEnabled
+			fingerprintFilePath := fmt.Sprintf("%s/%s.json", executorDir, fingerprint)
+
       switch {
       case config.ConsulStorageEnabled:
           kvPath := fmt.Sprintf("%s/%s", consulExecutorDir, alertname)
@@ -329,39 +338,36 @@ func (s *Server) amResolved(amMsg *template.Data) {
               log.Error("Failed to get Fingerprint data from Consul: %w", err)
               continue
           }
-
-          err = json.Unmarshal(data, &fingerprintData)
+          err = json.Unmarshal(data, &alertParameters)
           if err != nil {
               log.Error("Failed to unmarshal fingerprint data: %w", err)
               continue
           }
 
       default:
-          // Construct the file path for the fingerprint JSON file
-          fingerprintFilePath := fmt.Sprintf("%s/%s.json", executorDir, alertname)
-
-          // Check if the fingerprint file exists
           if _, err := os.Stat(fingerprintFilePath); os.IsNotExist(err) {
               log.Error("Fingerprint file not found: %s", fingerprintFilePath)
               continue
           }
 
-          // Read and parse the fingerprint JSON file
           fileContent, err := os.ReadFile(fingerprintFilePath)
           if err != nil {
               log.Error("Failed to read fingerprint file: %w", err)
               continue
           }
-
-          err = json.Unmarshal(fileContent, &fingerprintData)
+          err = json.Unmarshal(fileContent, &alertParameters)
           if err != nil {
               log.Error("Failed to unmarshal fingerprint data: %w", err)
               continue
           }
       }
 
-      // Process modulePath and destroy logic
-      modulePath := fingerprintData.Module
+      if alertParameters.TerraformScheduling == "sawtooth" {
+          log.Info("Terraform scheduling mode is set to sawtooth for this alert. Skipping destroy for alert: %s", fingerprint)
+          continue
+      }
+
+      modulePath := alertParameters.Module
       if modulePath == "" {
           log.Error("Module path is empty in fingerprint file")
           continue
@@ -376,7 +382,6 @@ func (s *Server) amResolved(amMsg *template.Data) {
           go terraform.RunTerraform(modulePath, "destroy")
       }
 
-      // Delete file from disk or remove key from Consul
       switch {
       case config.ConsulStorageEnabled:
           kvPath := fmt.Sprintf("%s/%s", consulExecutorDir, alertname)
@@ -385,6 +390,7 @@ func (s *Server) amResolved(amMsg *template.Data) {
               log.Error("Failed to delete key from Consul: %w", err)
               continue
           }
+
       default:
           err := os.Remove(fingerprintFilePath)
           if err != nil {
@@ -393,11 +399,9 @@ func (s *Server) amResolved(amMsg *template.Data) {
           }
       }
 
-      // Close the channel associated with the fingerprint
       s.tellFingers.Close(fingerprint)
-  }
+		}
 }
-
 
 // handleWebhook is meant to respond to webhook requests from prometheus alertmanager.
 // It unpacks the alert, and dispatches it to the matching programs through environment variables.
@@ -405,44 +409,58 @@ func (s *Server) amResolved(amMsg *template.Data) {
 // If a command fails, an HTTP 500 response is returned to alertmanager.
 // Note that alertmanager may treat non HTTP 200 responses as 'failure to notify', and may re-dispatch the alert to us.
 func (s *Server) handleWebhook(w http.ResponseWriter, req *http.Request) {
-	log.Info("Webhook triggered from remote address: %s", req.RemoteAddr)
+    log.Info("Webhook triggered from remote address: %s", req.RemoteAddr)
 
-	data, err := ioutil.ReadAll(req.Body)
-	if err != nil {
-		handleError(w, err)
-		s.errCounter.WithLabelValues(ErrLabelRead).Inc()
-		return
-	}
+    data, err := ioutil.ReadAll(req.Body)
+    if err != nil {
+        handleError(w, err)
+        s.errCounter.WithLabelValues(ErrLabelRead).Inc()
+        return
+    }
 
-	log.Info("Alert body:")
-	log.PrintJSONLog(string(data))
+    log.Debug("Alert body:")
+    log.PrintJSONLog(string(data))
 
-	var amMsg = &template.Data{}
-	if err := json.Unmarshal(data, amMsg); err != nil {
-		handleError(w, err)
-		s.errCounter.WithLabelValues(ErrLabelUnmarshall).Inc()
-		return
-	}
+    var amMsg = &template.Data{}
+    if err := json.Unmarshal(data, amMsg); err != nil {
+        handleError(w, err)
+        s.errCounter.WithLabelValues(ErrLabelUnmarshall).Inc()
+        return
+    }
 
-	log.Info("Alert template: %#v", amMsg)
-	log.Info("Alertname is: %#v", amMsg.Alerts[0].Labels["alertname"])
+    var wg sync.WaitGroup
+    var errors []error
+    var mu sync.Mutex
 
-	var errors []error
-	switch amMsg.Status {
-	case "firing":
-		errors = s.amFiring(amMsg)
-	case "resolved":
-		// When an alert is resolved, we will attempt to signal any active commands
-		// that were dispatched on behalf of it, by matching commands against fingerprints
-		// used to run them.
-		s.amResolved(amMsg)
-	default:
-		errors = append(errors, fmt.Errorf("Unknown alertmanager message status: %s", amMsg.Status))
-	}
+    for _, alert := range amMsg.Alerts {
+        log.Debug("Processing alert: %v", alert.Labels["alertname"])
+        wg.Add(1)
+				alertCopy := alert
 
-	if len(errors) > 0 {
-		handleError(w, concatErrors(errors...))
-	}
+		    go func(alert template.Alert) {
+		        defer wg.Done()
+		        switch alert.Status {
+		        case "firing":
+		            if errs := s.amFiring(&alert); len(errs) > 0 {
+		                mu.Lock()
+		                errors = append(errors, errs...)
+		                mu.Unlock()
+		            }
+		        case "resolved":
+		            s.amResolved(alert)
+		        default:
+		            mu.Lock()
+		            errors = append(errors, fmt.Errorf("Unknown alert status: %s", alert.Status))
+		            mu.Unlock()
+		        }
+		    }(alertCopy)
+    }
+
+    wg.Wait()
+
+    if len(errors) > 0 {
+        handleError(w, concatErrors(errors...))
+    }
 }
 
 // initMetrics initializes prometheus metrics
@@ -475,98 +493,104 @@ func (s *Server) initMetrics() error {
 //
 // The prometheus structs use sync/atomic in methods like Dec and Observe,
 // so they're safe to call concurrently from goroutines.
-func (s *Server) instrument(fingerprint string, cmd *command.Command, env []string, out chan<- command.CommandResult, amMsg *template.Data) error {
-	if s.initConfig != nil && s.initConfig.Server != nil && s.initConfig.Server.DataDir != "" {
-		dataDir = s.initConfig.Server.DataDir
-   	log.Debug("Data dir is: %s", dataDir)
-	} else {
-    dataDir = "./data"
-	}
-	executorDir := fmt.Sprintf("%s/process/alerts", dataDir)
+func (s *Server) instrument(fingerprint string, cmd *command.Command, env []string, out chan<- command.CommandResult, alert template.Alert) error {
+    dataDir := "./data"
+    if s.initConfig != nil && s.initConfig.Server != nil && s.initConfig.Server.DataDir != "" {
+        dataDir = s.initConfig.Server.DataDir
+    }
+    executorDir := fmt.Sprintf("%s/process/alerts", dataDir)
+		alertName := alert.Labels["alertname"]
+		var terraform_scheduling string
 
-	verbose := s.config.Verbose
-	s.processCurrent.Inc()
-	defer s.processCurrent.Dec()
-	var quit chan struct{}
-	if len(fingerprint) > 0 {
-		// The goroutine running the command will listen to this channel
-		// to determine if it should exit early.
-		quit = s.tellFingers.Add(fingerprint)
-		// This value is used to determine if new commands matching this fingerprint should start.
-		s.fingerCount.Inc(fingerprint)
-		defer s.fingerCount.Dec(fingerprint)
-	} else if s.config.Verbose {
-		log.Info("Command has no fingerprint, so it won't quit early if alert is resolved first:", cmd)
-	}
+    s.processCurrent.Inc()
+    defer s.processCurrent.Dec()
 
-	done := make(chan struct{})
-	cmdOut := make(chan command.CommandResult)
-	// Intercept responses from commands, so that we can update metrics we're interested in
-	go func() {
-		defer close(out)
-		for r := range cmdOut {
-			if r.Kind.Has(command.CmdFail) && r.Err != nil && cmd.ShouldNotify() {
-				s.errCounter.WithLabelValues(ErrLabelStart).Inc()
+    var quit chan struct{}
+    if len(fingerprint) > 0 {
+        quit = s.tellFingers.Add(fingerprint)
+        s.fingerCount.Inc(fingerprint)
+        defer s.fingerCount.Dec(fingerprint)
+    }
+
+    done := make(chan struct{})
+    cmdOut := make(chan command.CommandResult)
+
+    go func() {
+        defer close(out)
+        for r := range cmdOut {
+            if r.Kind.Has(command.CmdFail) && r.Err != nil && cmd.ShouldNotify() {
+                s.errCounter.WithLabelValues(ErrLabelStart).Inc()
+            }
+            if r.Kind.Has(command.CmdSigOk) {
+                s.sigCounter.WithLabelValues(SigLabelOk).Inc()
+            }
+            if r.Kind.Has(command.CmdSigFail) {
+                s.sigCounter.WithLabelValues(SigLabelFail).Inc()
+            }
+            out <- r
+        }
+    }()
+
+    start := time.Now()
+		log.Debug("Running command for alert fingerprint: %s", fingerprint)
+		cmd.Run(out, quit, done, env...)
+    <-done
+    s.processDuration.Observe(time.Since(start).Seconds())
+
+
+		s.commandDetailsMutex.Lock()
+		commandDetails, exists := s.commandDetails[fingerprint]
+		s.commandDetailsMutex.Unlock()
+
+    if !exists || len(commandDetails.Args) == 0 {
+				log.Error("Command details not found or empty for fingerprint: %s, current map: %+v", fingerprint, s.commandDetails)
+        return fmt.Errorf("Command details not found or empty for fingerprint: %s", fingerprint)
+    }
+
+    chdirArg := commandDetails.Args[0]
+    modulePath := chdirArg[len("-chdir="):]
+    modulePath, err := filepath.Abs(modulePath)
+    if err != nil {
+        log.Fatal("Failed to get absolute path: %w", err)
+    }
+
+		terraform_scheduling = commandDetails.TerraformScheduling
+
+    alertParameters := map[string]string{
+        "fingerprint": fingerprint,
+        "module":      modulePath,
+				"terraform_scheduling": terraform_scheduling,
+    }
+
+    data, err := json.MarshalIndent(alertParameters, "", "    ")
+    if err != nil {
+        return fmt.Errorf("Error marshaling fingerprint data: %w", err)
+    }
+
+		switch {
+		case config.ConsulStorageEnabled:
+			log.Info("Using Consul as storage backend for alert: %s", alertName)
+			kvPath := fmt.Sprintf("%s/%s", consulExecutorDir, alertName)
+			err = consul.ConsulStorePut(kvPath, string(data))
+			if err != nil {
+					return fmt.Errorf("Failed to register fingerprint on Consul: %w", err)
 			}
-			if r.Kind.Has(command.CmdSigOk) {
-				s.sigCounter.WithLabelValues(SigLabelOk).Inc()
+		default:
+			log.Info("Using defaut storage backend for alert: %s", alertName)
+			filePath := fmt.Sprintf("%s/%s.json", executorDir, fingerprint)
+			err = os.WriteFile(filePath, data, 0644)
+			if err != nil {
+					return fmt.Errorf("Error writing fingerprint data to file: %w", err)
 			}
-			if r.Kind.Has(command.CmdSigFail) {
-				s.sigCounter.WithLabelValues(SigLabelFail).Inc()
-			}
-			out <- r
 		}
-	}()
 
-	start := time.Now()
-	cmd.Run(cmdOut, quit, done, verbose, env...)
-	<-done
-	s.processDuration.Observe(time.Since(start).Seconds())
 
-	commandDetails, exists := s.commandDetails[fingerprint]
-	if !exists || len(commandDetails.Args) == 0 {
-			return fmt.Errorf("Command details not found or empty for fingerprint: %s", fingerprint)
-	}
-
-	chdirArg := commandDetails.Args[0]
-	modulePath := chdirArg[len("-chdir="):]
-	modulePath, err := filepath.Abs(modulePath)
-	if err != nil {
-			log.Fatal("Failed to get absolute path: %w", err)
-	}
-
-	fingerprintData := map[string]string{
-		"fingerprint": fingerprint,
-		"module":      modulePath,
-	}
-
-	data, err := json.MarshalIndent(fingerprintData, "", "	")
-	if err != nil {
-		return fmt.Errorf("Error marshaling fingerprint data: %w", err)
-	}
-
-	switch {
-	case config.ConsulStorageEnabled:
-		// var amMsg = &template.Data{}
-		kvPath := fmt.Sprintf("%s/%s", consulExecutorDir, amMsg.Alerts[0].Labels["alertname"])
-		err = consul.ConsulStorePut(kvPath, string(data))
-		if err != nil {
-				return fmt.Errorf("Failed to register fingerprint on Consul: %w", err)
-		}
-	default:
-		filePath := fmt.Sprintf("%s/%s.json", executorDir, fingerprint)
-		err = os.WriteFile(filePath, data, 0644)
-		if err != nil {
-			return fmt.Errorf("Error writing fingerprint data to file: %w", err)
-		}
-	}
-
-	return nil
+		return nil
 }
 
 // CanRun returns true if the Command is allowed to run based on its fingerprint and settings
-func (s *Server) CanRun(cmd *command.Command, amMsg *template.Data) (bool, CmdRunReason) {
-	if !cmd.Matches(amMsg) {
+func (s *Server) CanRun(cmd *command.Command, alert *template.Alert) (bool, CmdRunReason) {
+	if !cmd.Matches(alert) {
 		return false, CmdRunNoLabelMatch
 	}
 
@@ -574,7 +598,7 @@ func (s *Server) CanRun(cmd *command.Command, amMsg *template.Data) (bool, CmdRu
 		return true, CmdRunNoMax
 	}
 
-	fingerprint, ok := cmd.Fingerprint(amMsg)
+	fingerprint, ok := cmd.FingerprintForAlert(alert)
 	if !ok || fingerprint == "" {
 		return true, CmdRunNoFinger
 	}
@@ -629,7 +653,6 @@ func (s *Server) Start() (*http.Server, chan error) {
 			commands[i] = e.String()
 		}
 
-
 		if (s.config.TLSCrt != "") && (s.config.TLSKey != "") {
 			if s.config.Verbose {
 				log.Info("HTTPS on")
@@ -655,17 +678,17 @@ func StopServer(srv *http.Server) error {
 // NewServer returns a new server instance
 func NewServer(initConfig *config.InitConfig, config *config.Config) *Server {
 	s := Server{
-		initConfig:      initConfig,
-		config:          config,
-		tellFingers:     chanmap.NewChannelMap(),
-		fingerCount:     countermap.NewCounter(),
-		registry:        prometheus.NewPedanticRegistry(),
-		processDuration: prometheus.NewHistogram(procDurationOpts),
-		processCurrent:  prometheus.NewGauge(procCurrentOpts),
-		errCounter:      prometheus.NewCounterVec(errCountOpts, errCountLabels),
-		sigCounter:      prometheus.NewCounterVec(sigCountOpts, sigCountLabels),
-		skipCounter:     prometheus.NewCounterVec(skipCountOpts, skipCountLabels),
-    commandDetails:	 make(map[string]CommandDetails),
+			initConfig:      initConfig,
+			config:          config,
+			tellFingers:     chanmap.NewChannelMap(),
+			fingerCount:     countermap.NewCounter(),
+			registry:        prometheus.NewPedanticRegistry(),
+			processDuration: prometheus.NewHistogram(procDurationOpts),
+			processCurrent:  prometheus.NewGauge(procCurrentOpts),
+			errCounter:      prometheus.NewCounterVec(errCountOpts, errCountLabels),
+			sigCounter:      prometheus.NewCounterVec(sigCountOpts, sigCountLabels),
+			skipCounter:     prometheus.NewCounterVec(skipCountOpts, skipCountLabels),
+			commandDetails:	 make(map[string]CommandDetails),
 	}
 
 	return &s

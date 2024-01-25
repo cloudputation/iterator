@@ -13,6 +13,8 @@ ENV ITERATOR_LOG_DIRECTORY="/var/log/iterator"
 ENV ITERATOR_DATA_DIRECTORY="/var/lib/iterator"
 ENV TERRAFORM_PATH="/usr/local/bin/terraform"
 ENV TERRAGRUNT_PATH="/usr/local/bin/terragrunt"
+# Default port 9595
+ENV SERVICE_PORT="9595"
 
 WORKDIR ${ROOTDIR}
 
@@ -29,7 +31,7 @@ RUN addgroup -g 991 ${SERVICE_USERNAME} \
     && adduser -D -u 991 -G ${SERVICE_USERNAME} ${SERVICE_USERNAME}
 
 # Copy artifacts from builder
-COPY ./API_VERSION ./API_VERSION
+COPY ./VERSION ./VERSION
 COPY ./artifacts/terraform ${TERRAFORM_PATH}
 COPY ./artifacts/terragrunt ${TERRAGRUNT_PATH}
 COPY ./build/iterator /bin/iterator
@@ -44,8 +46,8 @@ RUN chown -R ${SERVICE_USERNAME}:${SERVICE_USERNAME} ${ROOTDIR} \
     && chmod +x ${TERRAFORM_PATH} \
     && chmod +x ${TERRAGRUNT_PATH}
 
-# Expose port 9595
-EXPOSE 9595
+
+EXPOSE ${SERVICE_PORT}
 
 # Set user
 USER ${SERVICE_USERNAME}

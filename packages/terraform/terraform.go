@@ -39,6 +39,7 @@ func runTerraformInitRoutine(moduleDir, terraformCommand string) error {
   l.Printf("Terraform stdout: %s", stdout.String())
   if stderr.String() != "" {
     log.Error("Terraform stderr: %s", stderr.String())
+    log.Fatal("Terraform stderr: %s", stderr.String())
   }
 
   if err != nil {
@@ -68,6 +69,7 @@ func RunTerraform(moduleDir, terraformCommand string) error {
   l.Printf("Terraform stdout: %s", stdout.String())
   if stderr.String() != "" {
     log.Error("Terraform stderr: %s", stderr.String())
+    log.Fatal("Terraform stderr: %s", stderr.String())
   }
 
   if err != nil {

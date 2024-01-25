@@ -8,6 +8,8 @@ on:
       - 'packages/**/*.go'
       - 'Dockerfile'
       - 'GNUmakefile'
+      - ".github/workflows/build.yml"
+      - ".github/workflows/codeql.yml"
   pull_request:
     branches: [ main ]
   workflow_dispatch:
@@ -58,6 +60,7 @@ jobs:
 
     - name: Check Artifacts
       run: |
+        sudo chown runner:docker ./artifacts/*
         ls -l ./artifacts
 
     - name: Build

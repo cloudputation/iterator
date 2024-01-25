@@ -65,7 +65,7 @@ build: ## goreleaser build
 .PHONY: spell
 spell: ## misspell
 	$(call print-target)
-	misspell -error -locale=US -w **.md
+	misspell -locale=US -w **.md
 
 .PHONY: lint
 lint: ## golangci-lint

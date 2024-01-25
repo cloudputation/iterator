@@ -29,7 +29,7 @@ IMAGE_DISTRIBUTOR := cloudputation
 
 # Phony targets for make commands
 .PHONY: all
-all: gen build spell lint test ## run all targets
+all: mod inst gen build spell lint test ## run all targets
 
 # CI build pipeline
 .PHONY: ci

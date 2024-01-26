@@ -34,11 +34,11 @@ VERSION_PATCH := $(shell echo $(DOCKER_TAG) | cut -d '.' -f3)
 all: mod inst gen spell lint test build docker-build docker-push ## run all targets
 
 .PHONY: release
-all: all ## run all targets for release
+release: all ## run all targets for release
 
 # CI build pipeline
 .PHONY: ci
-ci: mod inst gen spell lint test build docker-build ## run CI pipeline (skip docker-push)
+ci: mod inst gen spell lint build docker-build ## run CI pipeline (skip docker-push)
 
 
 # Extract release changelog

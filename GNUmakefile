@@ -97,7 +97,7 @@ diff: ## git diff
 ### FOR LOCAL TESTING ONLY
 # Test build the binary for docker
 .PHONY: test-build
-build: $(SOURCES) ## build binary
+test-build: $(SOURCES) ## test build binary
 	@echo "Downloading dependencies..."
 	@GO111MODULE=on go mod tidy
 	@GO111MODULE=on go mod download
@@ -107,13 +107,13 @@ build: $(SOURCES) ## build binary
 
 # Test build the Docker image
 .PHONY: test-docker-build
-docker-build: test-build ## build Docker container image
+test-docker-build: test-build ## test build Docker container image
 	@echo "Building the Docker image..."
 	docker build --build-arg PRODUCT_VERSION=$(DOCKER_TAG) -t $(DOCKER_IMAGE):$(DOCKER_TAG) .
 
 # Test push the Docker image to the registry
 .PHONY: test-docker-push
-docker-push: ## push Docker image
+test-docker-push: ## test push Docker image
 	@echo "Pushing the Docker image..."
 	docker tag $(DOCKER_IMAGE):$(DOCKER_TAG) $(IMAGE_DISTRIBUTOR)/$(DOCKER_IMAGE):$(DOCKER_TAG)
 	docker push $(IMAGE_DISTRIBUTOR)/$(DOCKER_IMAGE):$(DOCKER_TAG)

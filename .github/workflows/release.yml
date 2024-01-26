@@ -24,6 +24,7 @@ jobs:
     - name: Setup Environment
       run: |
         echo "VERSION=$(cat VERSION)"
+        mkdir -p ./artifacts
 
     - name: Cache Terraform and Terragrunt
       uses: actions/cache@v2
@@ -32,7 +33,15 @@ jobs:
         path: |
           ./artifacts/terraform
           ./artifacts/terragrunt
-        key: ${{ runner.os }}-tools-${{ hashFiles('**/checksums.txt') }}
+        key: ${{ runner.os }}-terraform-terragrunt-${{ env.TERRAGRUNT_VERSION }}
+
+    - name: Check Cache Hit
+      run: |
+        if [ "${{ steps.cache-tools.outputs.cache-hit }}" == "true" ]; then
+          echo "Cache hit, using cached Terraform and Terragrunt binaries."
+        else
+          echo "Cache miss, downloading Terraform and Terragrunt binaries."
+        fi
 
     - name: Install Terraform (if not cached)
       if: steps.cache-tools.outputs.cache-hit != 'true'
@@ -40,7 +49,6 @@ jobs:
         wget -O- https://apt.releases.hashicorp.com/gpg | sudo gpg --dearmor -o /usr/share/keyrings/hashicorp-archive-keyring.gpg
         echo "deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/hashicorp.list
         sudo apt update && sudo apt install terraform
-        mkdir -p ./artifacts
         sudo mv /usr/bin/terraform ./artifacts/terraform
 
     - name: Download Terragrunt (if not cached)
@@ -48,8 +56,13 @@ jobs:
       run: |
         wget https://github.com/gruntwork-io/terragrunt/releases/download/v${TERRAGRUNT_VERSION}/terragrunt_linux_amd64 -O terragrunt
         chmod +x terragrunt
-        mkdir -p ./artifacts
         sudo mv terragrunt ./artifacts/terragrunt
+
+    - name: Set Ownership and Permissions
+      run: |
+        sudo chown $(whoami) ./artifacts/*
+        chmod 755 ./artifacts/*
+        ls -l ./artifacts
 
     - name: Extract Changelog
       id: changelog
@@ -62,7 +75,10 @@ jobs:
         username: cloudputation
         password: ${{ secrets.ITERATOR_DOCKER_CI }}
 
-    - name: Run Goreleaser
-      run: goreleaser release
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    - name: Run release pipeline
+      run: make release
+
+    # - name: Run Goreleaser
+    #   run: goreleaser release
+    #   env:
+    #     GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

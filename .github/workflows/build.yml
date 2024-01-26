@@ -72,7 +72,7 @@ jobs:
         chmod 755 ./artifacts/*
         ls -l ./artifacts
 
-    - name: Build
+    - name: Run CI pipeline
       run: make ci
 
     # - name: Run Goreleaser

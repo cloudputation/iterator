@@ -23,21 +23,22 @@ SOURCES := $(shell find $(SRC_DIR) -name '*.go' ! -path "$(EXCLUDE_DIR)/*" ! -na
 
 # Docker-related variables
 DOCKER_IMAGE := iterator
-DOCKER_TAG := test.tag
 IMAGE_DISTRIBUTOR := cloudputation
-
+DOCKER_TAG := $(shell cat ./VERSION)
+VERSION_MAJOR := $(shell echo $(DOCKER_TAG) | cut -d '.' -f1)
+VERSION_MINOR := $(shell echo $(DOCKER_TAG) | cut -d '.' -f2)
+VERSION_PATCH := $(shell echo $(DOCKER_TAG) | cut -d '.' -f3)
 
 # Phony targets for make commands
 .PHONY: all
-all: mod inst gen build spell lint test ## run all targets
+all: mod inst gen spell lint test build docker-build docker-push ## run all targets
+
+.PHONY: release
+all: all ## run all targets for release
 
 # CI build pipeline
 .PHONY: ci
-ci: all diff ## run CI pipeline
-
-# Setup-CI sets up the dependencies for CI pipeline
-.PHONY: setup-ci
-setup-ci: mod inst ## Prepare dependencies for CI pipeline
+ci: mod inst gen spell lint test build docker-build ## run CI pipeline (skip docker-push)
 
 
 # Extract release changelog
@@ -62,10 +63,10 @@ gen: ## go generate
 	$(call print-target)
 	go generate ./...
 
-.PHONY: build
-build: ## goreleaser build
-	$(call print-target)
-	goreleaser build --rm-dist --single-target --snapshot
+# .PHONY: build
+# build: ## goreleaser build
+# 	$(call print-target)
+# 	goreleaser build --rm-dist --single-target --snapshot
 
 .PHONY: spell
 spell: ## misspell
@@ -93,11 +94,9 @@ diff: ## git diff
 		echo "$$untracked" ; \
 	fi
 
-
-### FOR LOCAL TESTING ONLY
-# Test build the binary for docker
-.PHONY: test-build
-test-build: $(SOURCES) ## test build binary
+# Build binary
+.PHONY: build
+build: $(SOURCES) ## build binary
 	@echo "Downloading dependencies..."
 	@GO111MODULE=on go mod tidy
 	@GO111MODULE=on go mod download
@@ -105,18 +104,25 @@ test-build: $(SOURCES) ## test build binary
 	@mkdir -p $(BUILD_DIR)
 	@CGO_ENABLED=0 GOOS=linux GOARCH=amd64 GO111MODULE=on go build -o $(BUILD_DIR)/$(BINARY_NAME) $(SRC_DIR)
 
-# Test build the Docker image
-.PHONY: test-docker-build
-test-docker-build: test-build ## test build Docker container image
+# Build the Docker image
+.PHONY: docker-build
+docker-build: build ## build Docker container image
 	@echo "Building the Docker image..."
 	docker build --build-arg PRODUCT_VERSION=$(DOCKER_TAG) -t $(DOCKER_IMAGE):$(DOCKER_TAG) .
+	docker tag $(DOCKER_IMAGE):$(DOCKER_TAG) $(DOCKER_IMAGE):latest
+	docker tag $(DOCKER_IMAGE):$(DOCKER_TAG) $(DOCKER_IMAGE):$(VERSION_MAJOR)
+	docker tag $(DOCKER_IMAGE):$(DOCKER_TAG) $(DOCKER_IMAGE):$(VERSION_MAJOR).$(VERSION_MINOR)
+	docker tag $(DOCKER_IMAGE):$(DOCKER_TAG) $(DOCKER_IMAGE):$(VERSION_MAJOR).$(VERSION_MINOR).$(VERSION_PATCH)
 
-# Test push the Docker image to the registry
-.PHONY: test-docker-push
-test-docker-push: ## test push Docker image
-	@echo "Pushing the Docker image..."
-	docker tag $(DOCKER_IMAGE):$(DOCKER_TAG) $(IMAGE_DISTRIBUTOR)/$(DOCKER_IMAGE):$(DOCKER_TAG)
-	docker push $(IMAGE_DISTRIBUTOR)/$(DOCKER_IMAGE):$(DOCKER_TAG)
+# Push the Docker image to registry
+.PHONY: docker-push
+docker-push: ## push Docker image
+	@echo "Pushing the Docker images..."
+	docker push $(IMAGE_DISTRIBUTOR)/$(DOCKER_IMAGE):latest
+	docker push $(IMAGE_DISTRIBUTOR)/$(DOCKER_IMAGE):$(VERSION_MAJOR)
+	docker push $(IMAGE_DISTRIBUTOR)/$(DOCKER_IMAGE):$(VERSION_MAJOR).$(VERSION_MINOR)
+	docker push $(IMAGE_DISTRIBUTOR)/$(DOCKER_IMAGE):$(VERSION_MAJOR).$(VERSION_MINOR).$(VERSION_PATCH)
+
 
 # Clean up
 .PHONY: clean

@@ -72,6 +72,9 @@ jobs:
         chmod 755 ./artifacts/*
         ls -l ./artifacts
 
+    - name: Setup go modules
+      run: go mod tidy
+
     - name: Build
       run: make ci
 

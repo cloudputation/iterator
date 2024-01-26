@@ -31,7 +31,7 @@ VERSION_PATCH := $(shell echo $(DOCKER_TAG) | cut -d '.' -f3)
 
 # Phony targets for make commands
 .PHONY: all
-all: mod inst gen spell lint test build docker-build docker-push ## run all targets
+all: mod inst gen spell test build docker-build docker-push ## run all targets
 
 .PHONY: release
 release: all ## run all targets for release

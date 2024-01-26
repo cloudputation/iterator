@@ -75,7 +75,7 @@ jobs:
     - name: Run CI pipeline
       run: make ci
 
-    # - name: Run Goreleaser
-    #   run: goreleaser release --clean --snapshot --debug
-    #   env:
-    #     GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    - name: Run Goreleaser
+      run: goreleaser release --clean --snapshot --debug
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

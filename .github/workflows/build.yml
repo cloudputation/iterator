@@ -72,13 +72,10 @@ jobs:
         chmod 755 ./artifacts/*
         ls -l ./artifacts
 
-    - name: Setup go modules
-      run: go mod tidy
-
     - name: Build
       run: make ci
 
-    - name: Run Goreleaser
-      run: goreleaser release --clean --snapshot --debug
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    # - name: Run Goreleaser
+    #   run: goreleaser release --clean --snapshot --debug
+    #   env:
+    #     GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

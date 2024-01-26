@@ -68,14 +68,14 @@ jobs:
 
     - name: Set Ownership and Permissions
       run: |
-        sudo chown -R $(whoami) ./artifacts
-        chmod -R 755 ./artifacts
+        sudo chown $(whoami) ./artifacts/*
+        chmod 755 ./artifacts/*
         ls -l ./artifacts
 
     - name: Build
       run: make ci
 
     - name: Run Goreleaser
-      run: goreleaser release --rm-dist --snapshot
+      run: goreleaser release --clean --snapshot --debug
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

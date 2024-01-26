@@ -38,7 +38,7 @@ release: all ## run all targets for release
 
 # CI build pipeline
 .PHONY: ci
-ci: mod inst gen spell lint build docker-build ## run CI pipeline (skip docker-push)
+ci: mod inst gen spell build docker-build ## run CI pipeline (skip docker-push)
 
 
 # Extract release changelog

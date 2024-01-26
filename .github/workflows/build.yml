@@ -8,6 +8,7 @@ on:
       - 'main.go'
       - 'packages/**/*.go'
       - 'Dockerfile'
+      - '.github/workflows/build.yml'
   workflow_dispatch:
 
 jobs:
@@ -44,19 +45,6 @@ jobs:
 
     - name: Build Binary
       run: make build
-
-    - name: Create Release
-      uses: softprops/action-gh-release@v1
-      with:
-        tag_name: "v${{ env.VERSION }}"
-        release_name: "Release v${{ env.VERSION }}"
-        draft: false
-        prerelease: false
-        body: "Iterator binary release"
-        files: |
-          build/iterator
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
     - name: Build Docker Container
       run: make docker-build

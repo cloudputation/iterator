@@ -29,12 +29,13 @@ VERSION_MAJOR := $(shell echo $(DOCKER_TAG) | cut -d '.' -f1)
 VERSION_MINOR := $(shell echo $(DOCKER_TAG) | cut -d '.' -f2)
 VERSION_PATCH := $(shell echo $(DOCKER_TAG) | cut -d '.' -f3)
 
+
 # Phony targets for make commands
 .PHONY: all
 all: mod inst gen spell test build docker-build docker-push ## run all targets
 
 .PHONY: release
-release: all ## run all targets for release
+release: docker-push ## run release targets
 
 # CI build pipeline
 .PHONY: ci
@@ -116,7 +117,7 @@ docker-build: build ## build Docker container image
 
 # Push the Docker image to registry
 .PHONY: docker-push
-docker-push: ## push Docker image
+docker-push: docker-build ## push Docker image
 	@echo "Pushing the Docker images..."
 	docker push $(IMAGE_DISTRIBUTOR)/$(DOCKER_IMAGE):latest
 	docker push $(IMAGE_DISTRIBUTOR)/$(DOCKER_IMAGE):$(VERSION_MAJOR)

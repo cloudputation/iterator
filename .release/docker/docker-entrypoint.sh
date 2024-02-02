@@ -22,7 +22,7 @@ SF_CONFIG_DIR=/iterator/config
 # Set the configuration directory
 if [ "$1" = '/bin/iterator' ]; then
 	shift
-	set -- /bin/iterator agent #-config-dir="$SF_CONFIG_DIR" "$@"
+	set -- /bin/iterator -f /etc/iterator/config.hcl
 fi
 
 exec "$@"

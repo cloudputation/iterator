@@ -10,15 +10,17 @@ import (
     log "github.com/cloudputation/iterator/packages/logger"
 )
 
-var terraformRoutine = []string{"init", "plan"}
+var terraformInitRoutine = []string{"init", "plan"}
+var terraformDirArg string
 
 func InitTerraform(cfg *config.InitConfig) {
   log.Info("Initializing Terraform..")
+  terraformDriver := cfg.Server.TerraformDriver
   for _, task := range cfg.Tasks {
       go func(t *config.Task) {
           moduleDir := t.Source
-          for _, command := range terraformRoutine {
-              if err := runTerraformInitRoutine(moduleDir, command); err != nil {
+          for _, command := range terraformInitRoutine {
+              if err := RunTerraform(terraformDriver, moduleDir, command); err != nil {
                   log.Error("Failed to initialize Terraform module %s: %v", moduleDir, err)
               }
           }
@@ -26,9 +28,21 @@ func InitTerraform(cfg *config.InitConfig) {
   }
 }
 
-func runTerraformInitRoutine(moduleDir, terraformCommand string) error {
-  terraformModulePath := fmt.Sprintf("-chdir=%s", moduleDir)
-  cmd := exec.Command("terraform", terraformModulePath, terraformCommand)
+func RunTerraform(terraformDriver, moduleDir, terraformCommand string) error {
+  switch {
+  case terraformDriver == "terraform":
+    terraformDirArg = "-chdir="
+  case terraformDriver == "terragrunt":
+    terraformDirArg = "-config-dir "
+  }
+  terraformModulePath := fmt.Sprintf("%s%s", terraformDirArg, moduleDir)
+  cmdArgs := []string{terraformModulePath, terraformCommand}
+
+  if terraformCommand == "apply" || terraformCommand == "destroy" {
+    cmdArgs = append(cmdArgs, "-auto-approve")
+  }
+
+  cmd := exec.Command(terraformDriver, cmdArgs...)
 
   var stdout, stderr bytes.Buffer
   cmd.Stdout = &stdout
@@ -36,47 +50,27 @@ func runTerraformInitRoutine(moduleDir, terraformCommand string) error {
 
   err := cmd.Run()
 
+  // Do not use logger for Terraform stdout to prevent clogging the log file
   l.Printf("Terraform stdout: %s", stdout.String())
   if stderr.String() != "" {
     log.Error("Terraform stderr: %s", stderr.String())
-    log.Fatal("Terraform stderr: %s", stderr.String())
   }
 
   if err != nil {
-      return fmt.Errorf("Failed to run Terraform %s on module: %s: %v", terraformCommand, moduleDir, err)
+    return fmt.Errorf("Failed to run Terraform %s on module: %s: %v", terraformCommand, moduleDir, err)
   }
 
-  if terraformCommand =="init" {
+  if terraformCommand == "init" {
     l.Printf("Initialized Terraform directory for module: %s", moduleDir)
   }
-  if terraformCommand =="plan" {
+
+  if terraformCommand == "plan" {
     log.Info("Ran Terraform plan for module: %s", moduleDir)
   }
 
-  return nil
-}
-
-func RunTerraform(moduleDir, terraformCommand string) error {
-  terraformModulePath := fmt.Sprintf("-chdir=%s", moduleDir)
-  cmd := exec.Command("terraform", terraformModulePath, terraformCommand, "-auto-approve")
-
-  var stdout, stderr bytes.Buffer
-  cmd.Stdout = &stdout
-  cmd.Stderr = &stderr
-
-  err := cmd.Run()
-
-  l.Printf("Terraform stdout: %s", stdout.String())
-  if stderr.String() != "" {
-    log.Error("Terraform stderr: %s", stderr.String())
-    log.Fatal("Terraform stderr: %s", stderr.String())
+  if terraformCommand == "apply" || terraformCommand == "destroy" {
+    log.Info("Executed Terraform %s on module: %s", terraformCommand, moduleDir)
   }
-
-  if err != nil {
-      return fmt.Errorf("Failed to run Terraform %s on module: %s: %v", terraformCommand, moduleDir, err)
-  }
-
-  log.Info("Executed Terraform %s on module: %s", terraformCommand, moduleDir)
 
   return nil
 }

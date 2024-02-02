@@ -6,6 +6,9 @@ import (
     "io/ioutil"
 )
 
+var terraformDriver string
+var terraformDirArg string
+
 type YAMLConfig struct {
     ListenAddress string        `yaml:"listen_address"`
     Verbose       bool          `yaml:"verbose"`
@@ -31,11 +34,19 @@ func RenderConfig(config *InitConfig, ymlConfigPath string) error {
         Verbose:       config.Server.LogLevel == "info",
     }
 
-    terraformDriver := config.Server.TerraformDriver
-
     for _, task := range config.Tasks {
         if task.Condition.Labels != nil {
-            chDir := fmt.Sprintf("-chdir=%s", task.Source)
+            terraformDriver := config.Server.TerraformDriver
+            if task.TerraformDriver != "" {
+              terraformDriver = task.TerraformDriver
+            }
+            switch {
+            case terraformDriver == "terraform":
+              terraformDirArg = "-chdir="
+            case terraformDriver == "terragrunt":
+              terraformDirArg = "--terragrunt-working-dir "
+            }
+            chDir := fmt.Sprintf("%s%s", terraformDirArg, task.Source)
             taskCmd := []string{chDir, "apply", "-auto-approve"}
             cmd := InitCommand{
                 Cmd:              terraformDriver,

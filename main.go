@@ -1,13 +1,15 @@
 package main
 
 import (
-		l "log"
+    "os"
     "github.com/cloudputation/iterator/packages/cli"
 )
 
 func main() {
-  rootCmd := cli.SetupRootCommand()
-  if err := rootCmd.Execute(); err != nil {
-      l.Fatal("Error executing command: %v", err)
-  }
+    app := cli.NewApp()
+
+    // Execute the root command
+    if err := app.RootCmd.Execute(); err != nil {
+        os.Exit(1)
+    }
 }

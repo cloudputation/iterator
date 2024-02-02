@@ -3,6 +3,7 @@ package consul
 import (
 		"fmt"
 		"encoding/json"
+		"strings"
 
 		"github.com/hashicorp/consul/api"
 		"github.com/cloudputation/iterator/packages/config"
@@ -81,7 +82,6 @@ func ConsulStoreGet(key string) ([]byte, error) {
     return kvPair.Value, nil
 }
 
-
 func ConsulStorePut(keyPath, jsonData string) error {
 	kv := ConsulClient.KV()
 
@@ -106,4 +106,46 @@ func ConsulStoreDelete(keyPath string) error {
 
 
 	return nil
+}
+
+func ConsulStoreListKeys(path string, recursive bool) ([]string, error) {
+	kv := ConsulClient.KV()
+
+	var keys []string
+	var separator string
+
+	// Ensure path ends with a slash for correct prefix behavior
+	if !strings.HasSuffix(path, "/") {
+		path += "/"
+	}
+
+	// If not recursive, set the separator to filter out sub-directory keys
+	if !recursive {
+		separator = "/"
+	}
+
+	// Get the list of keys
+	kvPairs, _, err := kv.Keys(path, separator, nil)
+	if err != nil {
+		return nil, fmt.Errorf("Failed to list keys at path: %s, error: %w", path, err)
+	}
+
+	for _, key := range kvPairs {
+		// Skip the directory path itself
+		if key == path {
+			continue
+		}
+
+		// Remove the path prefix from the key
+		trimmedKey := strings.TrimPrefix(key, path)
+
+		// Remove any trailing slash, indicating a sub-directory
+		trimmedKey = strings.TrimSuffix(trimmedKey, "/")
+
+		if trimmedKey != "" {
+			keys = append(keys, trimmedKey)
+		}
+	}
+
+	return keys, nil
 }

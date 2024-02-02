@@ -14,10 +14,11 @@ type InitConfig struct {
 }
 
 type Server struct {
-    Listen string
     DataDir string
-    LogLevel string
     LogDir string
+    LogLevel string
+    Listen string
+    Address string
     TerraformDriver string
     Consul          ConsulConfig
 }
@@ -30,6 +31,7 @@ type Task struct {
     Name        string
     Description string
     Source      string
+    TerraformDriver string 
     Condition   Condition
 }
 
@@ -102,6 +104,7 @@ func processServerBlock(serverBlock *hcl.Block) (map[string]interface{}, error) 
           {Name: "log_level"},
           {Name: "log_dir"},
           {Name: "listen"},
+          {Name: "address"},
           {Name: "terraform_driver"},
       },
       Blocks: []hcl.BlockHeaderSchema{
@@ -159,10 +162,11 @@ func processConsulBlock(consulBlock *hcl.Block) (map[string]interface{}, error) 
 
 func populateServerStruct(serverMap map[string]interface{}) *Server {
   server := &Server{
-      Listen: defaultListenAddr,
       DataDir: serverMap["data_dir"].(string),
       LogLevel: serverMap["log_level"].(string),
       LogDir: serverMap["log_dir"].(string),
+      Listen: defaultListenAddr,
+      Address: serverMap["address"].(string),
       TerraformDriver: serverMap["terraform_driver"].(string),
   }
 
@@ -187,6 +191,7 @@ func processTaskBlock(taskBlock *hcl.Block) (map[string]interface{}, error) {
           {Name: "name"},
           {Name: "description"},
           {Name: "source"},
+          {Name: "terraform_driver"},
       },
       Blocks: []hcl.BlockHeaderSchema{
           {Type: "condition", LabelNames: []string{"type"}},
@@ -289,6 +294,10 @@ func populateTaskStruct(taskMap map[string]interface{}) *Task {
       Name:        taskMap["name"].(string),
       Description: taskMap["description"].(string),
       Source:      taskMap["source"].(string),
+  }
+
+  if terraformDriver, ok := taskMap["terraform_driver"]; ok {
+      task.TerraformDriver = terraformDriver.(string)
   }
 
   if cond, ok := taskMap["condition"].(map[string]interface{}); ok {

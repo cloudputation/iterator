@@ -9,7 +9,6 @@ on:
       - 'Dockerfile'
       - 'GNUmakefile'
       - ".github/workflows/build.yml"
-      - ".github/workflows/codeql.yml"
   pull_request:
     branches: [ main ]
   workflow_dispatch:

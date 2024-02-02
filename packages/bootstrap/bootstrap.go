@@ -1,100 +1,86 @@
 package bootstrap
 
 import (
-	"fmt"
-  l "log"
-	"os"
-	"os/signal"
+    "fmt"
+    "os"
+    "os/signal"
 
-	"github.com/cloudputation/iterator/packages/config"
-  "github.com/cloudputation/iterator/packages/consul"
-	log "github.com/cloudputation/iterator/packages/logger"
-	"github.com/cloudputation/iterator/packages/server"
-	"github.com/cloudputation/iterator/packages/storage"
-	"github.com/cloudputation/iterator/packages/terraform"
+    "github.com/cloudputation/iterator/packages/config"
+    "github.com/cloudputation/iterator/packages/consul"
+    log "github.com/cloudputation/iterator/packages/logger"
+    "github.com/cloudputation/iterator/packages/server"
+    "github.com/cloudputation/iterator/packages/stats"
+    "github.com/cloudputation/iterator/packages/storage"
+    "github.com/cloudputation/iterator/packages/terraform"
 )
 
-const (
-    defaultListenAddr = "9595"
-    defaultLogLevel   = "info"
-)
+func BootstrapIterator(initConfig *config.InitConfig) error {
+    log.Info("Starting Iterator..")
+    log.Info("Log level is: %s", initConfig.Server.LogLevel)
 
-var GlobalConfig *config.InitConfig
+    storage.InitStorage(initConfig)
+    terraform.InitTerraform(initConfig)
 
-func BootstrapIterator(globalConfigPath string) error {
-  GlobalConfig, err := config.LoadConfig(globalConfigPath)
-  if err != nil {
-      l.Fatal("Error loading config: %w", err)
-  }
+    ymlConfigPath := fmt.Sprintf("%s/config.yml", initConfig.Server.DataDir)
 
-  // Initialize log
-  err = log.InitLogger(GlobalConfig.Server.LogDir, GlobalConfig.Server.LogLevel)
-  if err != nil {
-      l.Fatal("Error initializing log: %w", err)
-  }
-  defer log.CloseLogger()
-
-  log.Info("Starting Iterator..")
-  log.Info("Log level is: %s", GlobalConfig.Server.LogLevel)
-  storage.InitStorage(GlobalConfig)
-  terraform.InitTerraform(GlobalConfig)
-
-  ymlConfigPath := fmt.Sprintf("%s/config.yml", GlobalConfig.Server.DataDir)
-
-  // Render YAML configuration based on the loaded HCL config
-  err = config.RenderConfig(GlobalConfig, ymlConfigPath)
-  if err != nil {
-      log.Fatal("Error rendering YAML config: %w", err)
-  }
-  log.Info("YAML configuration generated successfully")
-
-  // Read YAML config
-  c, err := config.ReadConfig(ymlConfigPath)
-  if err != nil {
-      log.Fatal("Couldn't determine configuration: %w", err)
-  }
-
-  if config.ConsulStorageEnabled {
-    var consulAddress = GlobalConfig.Server.Consul.Address
-    log.Info("Consul storage is enabled!")
-    log.Info("Connecting to Consul at address: %s..", consulAddress)
-    err = consul.InitConsul(consulAddress)
+    // Render YAML configuration based on the loaded HCL config
+    err := config.RenderConfig(initConfig, ymlConfigPath)
     if err != nil {
-        return fmt.Errorf("Could not initialize Consul: %v", err)
+        log.Fatal("Error rendering YAML config: %w", err)
+    }
+    log.Info("YAML configuration generated successfully")
+
+    // Read YAML config
+    c, err := config.ReadConfig(ymlConfigPath)
+    if err != nil {
+        log.Fatal("Couldn't determine configuration: %w", err)
     }
 
-    err = consul.BootstrapConsul()
-    if err != nil {
-        return fmt.Errorf("Could not bootstrap factory on Consul: %v", err)
+    if initConfig.Server.Consul.Address != "" {
+        log.Info("Consul storage is enabled!")
+        log.Info("Connecting to Consul at address: %s..", initConfig.Server.Consul.Address)
+        err = consul.InitConsul(initConfig.Server.Consul.Address)
+        if err != nil {
+            return fmt.Errorf("Could not initialize Consul: %v", err)
+        }
+
+        err = consul.BootstrapConsul()
+        if err != nil {
+            return fmt.Errorf("Could not bootstrap factory on Consul: %v", err)
+        }
     }
-  }
 
-  startIterator(GlobalConfig, c)
+    err = stats.UpdateStatusWithActiveAlerts()
+    if err != nil {
+        return fmt.Errorf("Failed to update Iterator with alerts status: %v", err)
+    }
 
-  return nil
+    startIterator(initConfig, c)
+
+    return nil
 }
 
 func startIterator(initConfig *config.InitConfig, c *config.Config) {
-  s := server.NewServer(initConfig, c)
+    s := server.NewServer(initConfig, c)
 
-  // Listen for signals telling us to stop
-  signals := make(chan os.Signal, 1)
-  signal.Notify(signals, os.Interrupt)
+    // Listen for signals telling us to stop
+    signals := make(chan os.Signal, 1)
+    signal.Notify(signals, os.Interrupt)
 
-  // Start the HTTP server
-  srv, srvResult := s.Start()
+    // Start the HTTP server
+    srv, srvResult := s.Start()
 
-  select {
-  case err := <-srvResult:
-    if err != nil {
-      log.Fatal("Failed to serve for %s: %w", c.ListenAddr, err)
-    } else {
-      log.Info("HTTP server shut down")
+    select {
+    case err := <-srvResult:
+        if err != nil {
+            log.Fatal("Failed to serve for %s: %w", c.ListenAddr, err)
+        } else {
+            log.Info("HTTP server shut down")
+        }
+    case sig := <-signals:
+        log.Info("Shutting down due to signal: %s", sig)
+        if err := server.StopServer(srv); err != nil {
+            log.Info("Failed to shut down HTTP server: %w", err)
+        }
     }
-  case sig := <-signals:
-    log.Info("Shutting down due to signal: %s", sig)
-    if err := server.StopServer(srv); err != nil {
-      log.Info("Failed to shut down HTTP server: %w", err)
-    }
-  }
 }

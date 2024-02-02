@@ -4,7 +4,11 @@ server {
   log_level = "info"
   // Default port is 9595
   listen    = "9595"
+  // Remote or local server address when using the CLI
+  address   = "10.100.200.210:9595"
+  // Terraform drivers are either Terraform or Terragrunt
   terraform_driver  = "terraform"
+  // Consul configurations. If provided, Iterator will use Consul as storage backend
   consul {
     address = "10.100.200.210:8500"
   }
@@ -14,6 +18,8 @@ task {
   name        = "Task1"
   description = "Manage infrastructure for web service"
   source      = "/var/lib/iterator/terraform-data/moduleA"
+  // Terraform driver can also be defined at the task level
+  terraform_driver  = "terraform"
   condition "label-match" {
     // Sawtooth Terraform scheduling mode prevents Iterator from destroying a resource when
     // an alert status is resolved.

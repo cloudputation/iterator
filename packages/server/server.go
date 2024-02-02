@@ -23,7 +23,9 @@ import (
 	"github.com/cloudputation/iterator/packages/config"
   "github.com/cloudputation/iterator/packages/consul"
 	"github.com/cloudputation/iterator/packages/countermap"
+	"github.com/cloudputation/iterator/packages/lifecycle"
 	log "github.com/cloudputation/iterator/packages/logger"
+	"github.com/cloudputation/iterator/packages/stats"
 	"github.com/cloudputation/iterator/packages/terraform"
 )
 
@@ -180,9 +182,9 @@ func amDataToEnvForAlert(alert *template.Alert) []string {
 
 // Give default to CommandDetails
 func DefaultCommandDetails(cmd string, args []string, terraformScheduling string) CommandDetails {
-    if terraformScheduling == "" {
-        terraformScheduling = "default" // Replace 'default_value' with the actual default value you want
-    }
+		if terraformScheduling == "" {
+				terraformScheduling = "default"
+		}
     return CommandDetails{
         Cmd:                 cmd,
         Args:                args,
@@ -312,7 +314,7 @@ func (s *Server) amFiring(alert *template.Alert) []error {
 
 // amResolved handles a resolved alert message from alertmanager
 func (s *Server) amResolved(alert template.Alert) {
-  dataDir := s.initConfig.Server.DataDir
+	dataDir := s.initConfig.Server.DataDir
   executorDir := fmt.Sprintf("%s/process/alerts", dataDir)
   alertname := alert.Labels["alertname"]
 
@@ -320,6 +322,7 @@ func (s *Server) amResolved(alert template.Alert) {
       var alertParameters struct {
           Fingerprint        string `json:"fingerprint"`
           Module             string `json:"module"`
+          TerraformDriver		 string `json:"terraform_driver"`
           TerraformScheduling string `json:"terraform_scheduling"`
       }
 
@@ -363,7 +366,7 @@ func (s *Server) amResolved(alert template.Alert) {
       }
 
       if alertParameters.TerraformScheduling == "sawtooth" {
-          log.Info("Terraform scheduling mode is set to sawtooth for this alert. Skipping destroy for alert: %s", fingerprint)
+          log.Info("Terraform scheduling mode is set to sawtooth for alert: %s. Skipping destroy...", alertname)
           continue
       }
 
@@ -379,7 +382,8 @@ func (s *Server) amResolved(alert template.Alert) {
       }
 
       if destroy {
-          go terraform.RunTerraform(modulePath, "destroy")
+					terraformDriver := alertParameters.TerraformDriver
+        	go terraform.RunTerraform(terraformDriver, modulePath, "destroy")
       }
 
       switch {
@@ -461,6 +465,13 @@ func (s *Server) handleWebhook(w http.ResponseWriter, req *http.Request) {
     if len(errors) > 0 {
         handleError(w, concatErrors(errors...))
     }
+
+		err = stats.UpdateStatusWithActiveAlerts()
+		if err != nil {
+        handleError(w, err)
+        s.errCounter.WithLabelValues(ErrLabelRead).Inc()
+				return
+		}
 }
 
 // initMetrics initializes prometheus metrics
@@ -500,7 +511,6 @@ func (s *Server) instrument(fingerprint string, cmd *command.Command, env []stri
     }
     executorDir := fmt.Sprintf("%s/process/alerts", dataDir)
 		alertName := alert.Labels["alertname"]
-		var terraform_scheduling string
 
     s.processCurrent.Inc()
     defer s.processCurrent.Dec()
@@ -547,19 +557,31 @@ func (s *Server) instrument(fingerprint string, cmd *command.Command, env []stri
         return fmt.Errorf("Command details not found or empty for fingerprint: %s", fingerprint)
     }
 
-    chdirArg := commandDetails.Args[0]
-    modulePath := chdirArg[len("-chdir="):]
+		var modulePath string
+		var terraformDriver string
+		var terraformScheduling string
+
+		terraformDriver = commandDetails.Cmd
+		terraformScheduling = commandDetails.TerraformScheduling
+		chdirArg := commandDetails.Args[0]
+
+		switch {
+		case terraformDriver == "terraform":
+			modulePath = chdirArg[len("-chdir="):]
+		case terraformDriver == "terragrunt":
+			modulePath = chdirArg[len("--terragrunt-working-dir "):]
+		}
+
     modulePath, err := filepath.Abs(modulePath)
     if err != nil {
         log.Fatal("Failed to get absolute path: %w", err)
     }
 
-		terraform_scheduling = commandDetails.TerraformScheduling
-
     alertParameters := map[string]string{
         "fingerprint": fingerprint,
         "module":      modulePath,
-				"terraform_scheduling": terraform_scheduling,
+				"terraform_driver": terraformDriver,
+				"terraform_scheduling": terraformScheduling,
     }
 
     data, err := json.MarshalIndent(alertParameters, "", "    ")
@@ -583,7 +605,6 @@ func (s *Server) instrument(fingerprint string, cmd *command.Command, env []stri
 					return fmt.Errorf("Error writing fingerprint data to file: %w", err)
 			}
 		}
-
 
 		return nil
 }
@@ -611,6 +632,40 @@ func (s *Server) CanRun(cmd *command.Command, alert *template.Alert) (bool, CmdR
 	return false, CmdRunFingerOver
 }
 
+// handleRelease responds to release requests.
+// It unpacks the alert name from the request, and triggers the corresponding lifecycle function.
+func (s *Server) handleRelease(w http.ResponseWriter, req *http.Request) {
+	log.Info("Release endpoint triggered from remote address: %s", req.RemoteAddr)
+
+	data, err := ioutil.ReadAll(req.Body)
+	if err != nil {
+		handleError(w, err)
+		return
+	}
+
+	var alertData struct {
+		AlertName string `json:"alert_name"`
+	}
+	if err := json.Unmarshal(data, &alertData); err != nil {
+		handleError(w, err)
+		return
+	}
+
+	if alertData.AlertName == "" {
+		handleError(w, fmt.Errorf("alert name is required"))
+		return
+	}
+
+	log.Info("Processing release for alert: %s", alertData.AlertName)
+	if err := lifecycle.HandleSawtoothScheduling(s.initConfig, alertData.AlertName); err != nil {
+		handleError(w, err)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	fmt.Fprint(w, "Release processed successfully for alert: \n", alertData.AlertName)
+}
+
 // Start runs a golang http server with the given routes.
 // Returns
 // * a reference to the HTTP server (so that we can gracefully shut it down)
@@ -636,6 +691,7 @@ func (s *Server) Start() (*http.Server, chan error) {
 	mux := http.NewServeMux()
 	srv := &http.Server{Addr: serverPort, Handler: mux}
 	mux.HandleFunc("/", s.handleWebhook)
+	mux.HandleFunc("/release", s.handleRelease)
 	mux.HandleFunc("/_health", handleHealth)
 	mux.Handle("/metrics", promhttp.HandlerFor(s.registry, promhttp.HandlerOpts{
 		// Prometheus can use the same logger we are, when printing errors about serving metrics

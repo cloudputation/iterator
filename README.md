@@ -16,7 +16,7 @@ Orchestrate your infrastructure based on your application's usage data by using 
 ### Start building towards Highly Iterable lifecycles
 Integrate deeply your infrastructure lifecycle with your application's roadmap by codifying business decisions like the expansion of your application. Use Iterator to deploy your infrastructure to a new region to follow your users geographically by sensing your application's popularity across the globe.
 
-### OS support
+## OS support
 Iterator is only available for Linux.
 
 ## Usage
@@ -94,10 +94,26 @@ task {
 }
 ```
 
+## Sawtooth Scheduling Mode
+Iterator allows for a forward-only Terraform deployment mode which prevent it to destroy the resource when the corresponding alert is resolved. To destroy the resource, use the `release` subcommand.
+```bash
+iterator release [alert name]
+```
+Note that the server address has to be configured in the config.hcl file.
+
+### Tip
+User the `local-exec` or `remote-exec` provisioners to automated a release based on a second alert task configuration.
+```hcl
+provisioner "local-exec" {
+  command = "iterator release ${var.alert_name}"
+}
+```
+
 ## Consul Backend
 Iterator can use Consul as storage backend.
+
 ### Consul-Terraform-Sync integration
-When enabled, Iterator can serve as a bridge for CTS. Simply replace <alertname> for the actual alert name. CTS can now also operate on alerts.
+When enabled, Iterator can serve as a bridge for CTS. Simply replace <alertname> for the actual alert name. CTS can now also operate on alerts. Note that Iterator will still run the Terraform resource at the configured source. You need to make sure that the Terraform resource deploymed will not interfere with the resource deployed by CTS.
 ```hcl
 task {
   name        = "consul_kv_condition_task"

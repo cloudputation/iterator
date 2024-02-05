@@ -1,13 +1,13 @@
 package terraform
 
 import (
-    "bytes"
-    "fmt"
-    l "log"
-    "os/exec"
+  "bytes"
+  "fmt"
+  l "log"
+  "os/exec"
 
-    "github.com/cloudputation/iterator/packages/config"
-    log "github.com/cloudputation/iterator/packages/logger"
+  "github.com/cloudputation/iterator/packages/config"
+  log "github.com/cloudputation/iterator/packages/logger"
 )
 
 var terraformInitRoutine = []string{"init", "plan"}
@@ -17,14 +17,14 @@ func InitTerraform(cfg *config.InitConfig) {
   log.Info("Initializing Terraform..")
   terraformDriver := cfg.Server.TerraformDriver
   for _, task := range cfg.Tasks {
-      go func(t *config.Task) {
-          moduleDir := t.Source
-          for _, command := range terraformInitRoutine {
-              if err := RunTerraform(terraformDriver, moduleDir, command); err != nil {
-                  log.Error("Failed to initialize Terraform module %s: %v", moduleDir, err)
-              }
-          }
-      }(task)
+    go func(t *config.Task) {
+      moduleDir := t.Source
+      for _, command := range terraformInitRoutine {
+        if err := RunTerraform(terraformDriver, moduleDir, command); err != nil {
+          log.Error("Failed to initialize Terraform module %s: %v", moduleDir, err)
+        }
+      }
+    }(task)
   }
 }
 

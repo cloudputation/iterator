@@ -30,8 +30,8 @@ func HandleSawtoothScheduling(cfg *config.InitConfig, alertName string) error {
 			return fmt.Errorf("failed to retrieve alert data for %s from Consul: %v", alertName, err)
 		}
 	default:
-    dataDir := cfg.Server.DataDir
-    executorDir := fmt.Sprintf("%s/process/alerts", dataDir)
+		dataDir := cfg.Server.DataDir
+		executorDir := fmt.Sprintf("%s/process/alerts", dataDir)
 		filePath := filepath.Join(executorDir, fmt.Sprintf("%s.json", alertName))
 		alertData, err = os.ReadFile(filePath)
 		if err != nil {

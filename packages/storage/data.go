@@ -1,11 +1,11 @@
 package storage
 
 import (
-    "fmt"
-    "os"
+  "fmt"
+  "os"
 
-    "github.com/cloudputation/iterator/packages/config"
-    log "github.com/cloudputation/iterator/packages/logger"
+  "github.com/cloudputation/iterator/packages/config"
+  log "github.com/cloudputation/iterator/packages/logger"
 )
 
 func InitStorage(cfg *config.InitConfig) {
@@ -15,9 +15,9 @@ func InitStorage(cfg *config.InitConfig) {
   dataDirectories := []string{dataDir, executorDir}
 
   for _, dir := range dataDirectories {
-      if err := createDirectory(dir); err != nil {
-          log.Info("Error creating directory %s: %v", dataDir, err)
-      }
+    if err := createDirectory(dir); err != nil {
+      log.Info("Error creating directory %s: %v", dataDir, err)
+    }
   }
 }
 

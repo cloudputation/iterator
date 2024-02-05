@@ -1,13 +1,13 @@
 package consul
 
 import (
-		"fmt"
-		"encoding/json"
-		"strings"
+	"fmt"
+	"encoding/json"
+	"strings"
 
-		"github.com/hashicorp/consul/api"
-		"github.com/cloudputation/iterator/packages/config"
-		log "github.com/cloudputation/iterator/packages/logger"
+	"github.com/hashicorp/consul/api"
+	"github.com/cloudputation/iterator/packages/config"
+	log "github.com/cloudputation/iterator/packages/logger"
 )
 
 type IteratorStatus struct {
@@ -25,7 +25,7 @@ func InitConsul(consulAddress string) error {
 
 	ConsulClient, err = api.NewClient(consulConfig)
 	if err != nil {
-			return fmt.Errorf("Failed to initialize Consul client: %w", err)
+		return fmt.Errorf("Failed to initialize Consul client: %w", err)
 	}
 	log.Info("Consul client initialized successfully.")
 
@@ -89,7 +89,7 @@ func ConsulStorePut(keyPath, jsonData string) error {
 	p := &api.KVPair{Key: keyPath, Value: []byte(jsonData)}
 	_, err = kv.Put(p, writeOptions)
 	if err != nil {
-			return fmt.Errorf("Failed to upload key: %s, error: %w", keyPath, err)
+		return fmt.Errorf("Failed to upload key: %s, error: %w", keyPath, err)
 	}
 
 
@@ -101,7 +101,7 @@ func ConsulStoreDelete(keyPath string) error {
 
 	_, err := kv.Delete(keyPath, nil)
 	if err != nil {
-			return fmt.Errorf("Failed to delete key: %s, error: %w", keyPath, err)
+		return fmt.Errorf("Failed to delete key: %s, error: %w", keyPath, err)
 	}
 
 
@@ -114,32 +114,25 @@ func ConsulStoreListKeys(path string, recursive bool) ([]string, error) {
 	var keys []string
 	var separator string
 
-	// Ensure path ends with a slash for correct prefix behavior
 	if !strings.HasSuffix(path, "/") {
 		path += "/"
 	}
 
-	// If not recursive, set the separator to filter out sub-directory keys
 	if !recursive {
 		separator = "/"
 	}
 
-	// Get the list of keys
 	kvPairs, _, err := kv.Keys(path, separator, nil)
 	if err != nil {
 		return nil, fmt.Errorf("Failed to list keys at path: %s, error: %w", path, err)
 	}
 
 	for _, key := range kvPairs {
-		// Skip the directory path itself
 		if key == path {
 			continue
 		}
 
-		// Remove the path prefix from the key
 		trimmedKey := strings.TrimPrefix(key, path)
-
-		// Remove any trailing slash, indicating a sub-directory
 		trimmedKey = strings.TrimSuffix(trimmedKey, "/")
 
 		if trimmedKey != "" {

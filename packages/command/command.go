@@ -174,7 +174,7 @@ func (c Command) Equal(other *Command) bool {
 
 // Fingerprint returns the fingerprint of the first alarm that matches the command's labels.
 // The first fingerprint found is returned if we have no MatchLabels defined.
-func (c Command) FingerprintForAlert(alert *template.Alert) (string, bool) {
+func (c Command) Fingerprint(alert *template.Alert) (string, bool) {
     matched := 0
     for k, v := range c.MatchLabels {
         other, ok := alert.Labels[k]

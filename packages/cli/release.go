@@ -11,14 +11,13 @@ import (
 
 // handleRelease creates a JSON object with the alert name and sends it to the specified address.
 func (app *App) handleRelease(alertName string) error {
-    // Create a JSON object with the alert name
+    // Create the JSON object
     alertData := map[string]string{"alert_name": alertName}
     jsonData, err := json.Marshal(alertData)
     if err != nil {
         return fmt.Errorf("error marshaling alert data: %v", err)
     }
 
-    // Fetch server address from the configuration
     address := fmt.Sprintf("http://%s", app.Config.Server.Address)
     endpoint := "/release"
 

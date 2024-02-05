@@ -23,7 +23,7 @@ jobs:
 
     - name: Setup Environment
       run: |
-        echo "VERSION=$(cat VERSION)"
+        echo "VERSION=$(cat VERSION)" >> $GITHUB_ENV
         mkdir -p ./artifacts
 
     - name: Cache Terraform and Terragrunt

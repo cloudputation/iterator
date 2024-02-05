@@ -67,7 +67,9 @@ jobs:
     - name: Extract Changelog
       id: changelog
       run: |
-        echo "RELEASE_CHANGELOG=$(bash tools/changelog.sh)" >> $GITHUB_ENV
+        echo "RELEASE_CHANGELOG<<EOF" >> $GITHUB_ENV
+        bash tools/changelog.sh >> $GITHUB_ENV
+        echo "EOF" >> $GITHUB_ENV
 
     - name: Build Binary
       run: make build

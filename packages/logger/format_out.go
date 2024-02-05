@@ -1,9 +1,9 @@
 package logger
 
 import (
-    "encoding/json"
-    "gopkg.in/yaml.v2"
-    "strings"
+  "encoding/json"
+  "gopkg.in/yaml.v2"
+  "strings"
 )
 
 func PrintJSONLog(jsonStr string) error {

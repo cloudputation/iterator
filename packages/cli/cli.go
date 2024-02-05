@@ -29,7 +29,7 @@ func NewApp() *App {
         configFile = "/etc/iterator/config.hcl"
       }
 
-      // Load config
+      // Load configuration file
       app.Config, err = config.LoadConfig(configFile)
       if err != nil {
         l.Fatal("Failed to load config: %v", err)

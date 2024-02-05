@@ -248,11 +248,9 @@ func (c Command) Run(out chan<- CommandResult, quit chan struct{}, done chan str
             }
         }
     default:
-        // If no quit signal, just continue.
+    // If no quit signal, just continue.
     }
 }
-
-
 
 // ShouldIgnoreResolved returns the interpreted value of c.IgnoreResolved.
 // This method is used to work around ambiguity of unmarshalling yaml boolean values,

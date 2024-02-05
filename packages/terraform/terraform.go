@@ -35,6 +35,7 @@ func RunTerraform(terraformDriver, moduleDir, terraformCommand string) error {
   case terraformDriver == "terragrunt":
     terraformDirArg = "-config-dir "
   }
+
   terraformModulePath := fmt.Sprintf("%s%s", terraformDirArg, moduleDir)
   cmdArgs := []string{terraformModulePath, terraformCommand}
 

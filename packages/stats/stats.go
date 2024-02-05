@@ -32,17 +32,13 @@ func UpdateStatusWithActiveAlerts() error {
     return fmt.Errorf("Failed to retrieve current status: %v", err)
   }
 
-  // Unmarshal the current status
   var currentStatus IteratorStatus
   err = json.Unmarshal(currentStatusJSON, &currentStatus)
   if err != nil {
     return fmt.Errorf("Failed to unmarshall current status: %v", err)
   }
 
-  // Update the status with the retrieved alert keys
   currentStatus.ActiveAlerts = alertKeys
-
-  // Marshal the updated status back to JSON
   updatedStatusJSON, err := json.MarshalIndent(currentStatus, "", "    ")
   if err != nil {
     return fmt.Errorf("Failed to marshall updated status: %v", err)

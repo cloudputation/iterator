@@ -24,7 +24,7 @@ func InitStorage(cfg *config.InitConfig) {
 func createDirectory(path string) error {
   err := os.MkdirAll(path, 0755)
   if err != nil {
-      return err
+    return err
   }
   log.Info("Directory created: %s", path)
   return nil

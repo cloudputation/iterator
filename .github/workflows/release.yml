@@ -67,7 +67,7 @@ jobs:
     - name: Extract Changelog
       id: changelog
       run: |
-        echo "::set-output name=content::$(make changelog)"
+        echo "RELEASE_CHANGELOG=$(make changelog)" >> $GITHUB_ENV
 
     - name: Build Binary
       run: make build
@@ -79,7 +79,7 @@ jobs:
         release_name: "Release v${{ env.VERSION }}"
         draft: false
         prerelease: false
-        body: "Iterator binary release"
+        body: ${{ env.RELEASE_CHANGELOG }}
         files: |
           build/iterator
       env:

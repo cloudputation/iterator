@@ -1,11 +1,13 @@
 # GNUmakefile
 
-.DEFAULT_GOAL := all
+.DEFAULT_GOAL := ci
 # Configure shell path
 SHELL := /bin/bash
 
+APPLICATION_NAME := iterator
+
 # Name of the binary to be built
-BINARY_NAME := iterator
+BINARY_NAME := $(APPLICATION_NAME)
 
 # Source directory
 SRC_DIR := .
@@ -22,7 +24,7 @@ EXCLUDE_PATTERN := *.back.go
 SOURCES := $(shell find $(SRC_DIR) -name '*.go' ! -path "$(EXCLUDE_DIR)/*" ! -name "$(EXCLUDE_PATTERN)")
 
 # Docker-related variables
-DOCKER_IMAGE := iterator
+DOCKER_IMAGE := $(APPLICATION_NAME)
 IMAGE_DISTRIBUTOR := cloudputation
 DOCKER_TAG := $(shell cat ./VERSION)
 VERSION_MAJOR := $(shell echo $(DOCKER_TAG) | cut -d '.' -f1)

@@ -3,6 +3,9 @@
 ## Description
 Iterator is an event listener that automates infrastructure management by bridging monitoring (Alertmanager) and infrastructure as code (Terraform) into one tool. Allowing teams to plan ahead and design responses based on observability, from infrastructure logs to application usage analytics, to virtually any definable alert. A simple trigger/action engine that enables highly iterable lifecycles by reducing the manual involvement in the planning phase as well as infrastructure operability.
 
+## High level workflow
+![High level workflow](.release/docs/assets/iterator-alert-terraform-workflow.jpg)
+Iterator allows to turn metrics and events into actionable data and to take action on that data.
 
 ## Uses cases
 ### Event driven development to step up from automation to autonomy
